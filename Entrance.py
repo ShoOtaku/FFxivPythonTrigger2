@@ -25,10 +25,15 @@ try:
         "MoPlus",  # 鼠标功能增强
         "ActorQuery",  # actor 查询
         "Zoom",  # 视距解限
-        "XivCombo",  # 连击绑定（一键系列）
+        #"XivCombo",  # 连击绑定（一键系列）
         "XivCraft",  # 生产规划器
         # "ACTLogLines",  # act接口
-        "SendKeys"  # 按键发送
+        "SendKeys",  # 按键发送
+        "PosLocker",
+        "SkillAniUnlocker",
+        "Slider",
+        "SpeedHack",
+        "XivCombat"
     ])
     start()
 except Exception:
