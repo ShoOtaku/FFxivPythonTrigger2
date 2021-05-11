@@ -75,7 +75,19 @@ from json import dumps
 import _thread
 import socket
 import time
+<<<<<<< HEAD
 import ctypes
+=======
+import argparse
+import ctypes
+import sys
+
+parser = argparse.ArgumentParser(description='using to inject FFxivPythonTrigger to a game process')
+parser.add_argument('-p', '--pid', type=int, nargs='?', default=None, metavar='PID', help='pid of process to inject')
+parser.add_argument('-n', '--pName', nargs='?', default="ffxiv_dx11.exe", metavar='Process Name', help='name of process find to inject')
+parser.add_argument('-e', '--entrance', nargs='?', default="Entrance.py", metavar='File Name', help='entrance file of FFxivPythonTrigger')
+args = parser.parse_args(sys.argv[1:])
+>>>>>>> 950e35837d27fe95958ce7b6a012c0e0bda6e41c
 
 try:
     is_admin = ctypes.windll.shell32.IsUserAnAdmin()
@@ -85,6 +97,10 @@ if not is_admin:
     ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, " ".join(sys.argv), None, 1)
     exit()
 
+<<<<<<< HEAD
+=======
+endl = "\n<press enter to exit>"
+>>>>>>> 950e35837d27fe95958ce7b6a012c0e0bda6e41c
 pid = args.pid
 if pid is None:
     print("start searching for game process [%s]..." % args.pName)
