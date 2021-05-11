@@ -34,7 +34,8 @@ try:
         "Teleporter",
         "Slider",
         "SpeedHack",
-        "XivCombat"
+        "XivCombat",
+        "CraftAutomation"
     ])
     start()
 except Exception:

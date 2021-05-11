@@ -37,7 +37,7 @@ registered_solvers = [
     # SkyBuilder4Astar.SkyBuilder4,
 ]
 
-callback = lambda ans: api.Magic.macro_command('/ac "%s"' % ans)
+callback = lambda ans: speaker.Speak(ans)
 
 
 class XivCraft(PluginBase):
