@@ -7,14 +7,14 @@ class Solver(object):
     player: Models.Player
     logger: Logger
 
-    def __init__(self, recipe: Models.Recipe, player: Models.Player, logger: Logger):
-        self.recipe = recipe
-        self.player = player
+    def __init__(self, craft:Craft.Craft, logger: Logger):
+        self.recipe = craft.recipe
+        self.player = craft.player
         self.logger = logger
 
     @staticmethod
-    def suitable(recipe: Models.Recipe, player: Models.Player)->bool:
+    def suitable(craft)->bool:
         return True
 
-    def process(self, craft: Craft.Craft = None, used_skill: Models.Skill = None)->str:
+    def process(self, craft: Craft.Craft, used_skill: Models.Skill = None)->str:
         return "观察"

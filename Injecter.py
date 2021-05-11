@@ -1,35 +1,101 @@
+import argparse
+import sys
+
+endl = "\n<press enter to exit>"
+if sys.version_info < (3, 9):
+    input("please use python environment >=3.9" + endl)
+    exit()
+parser = argparse.ArgumentParser(description='using to inject FFxivPythonTrigger to a game process')
+parser.add_argument('-p', '--pid', type=int, nargs='?', default=None, metavar='PID', help='pid of process to inject')
+parser.add_argument('-n', '--pName', nargs='?', default="ffxiv_dx11.exe", metavar='Process Name', help='name of process find to inject')
+parser.add_argument('-e', '--entrance', nargs='?', default="Entrance.py", metavar='File Name', help='entrance file of FFxivPythonTrigger')
+parser.add_argument('-sr', dest='skip_requirement_check', action='store_const', const=True, default=False, help='sum the integers')
+args = parser.parse_args(sys.argv[1:])
+if not args.skip_requirement_check:
+    import urllib.request
+    from urllib.error import HTTPError, URLError
+    import pkg_resources, pip
+    from pkg_resources import DistributionNotFound, VersionConflict
+    from urllib.parse import urlsplit
+
+    pip_source_name = "default"
+    pip_source = "https://pypi.python.org/simple"
+    pip_sources = {
+        '阿里云': 'http://mirrors.aliyun.com/pypi/simple/',
+        # '中国科技大学': 'https://pypi.mirrors.ustc.edu.cn/simple',
+        '豆瓣(douban)': 'http://pypi.douban.com/simple/',
+        '清华大学': 'https://pypi.tuna.tsinghua.edu.cn/simple',
+    }
+
+
+    def test_url(name, url):
+        try:
+            return urllib.request.urlopen(url, timeout=5).getcode() == 200
+        except (HTTPError, URLError) as error:
+            print('Data of [%s] not retrieved because %s' % (name, error))
+        except socket.timeout:
+            print('socket timed out - URL [%s]' % url)
+        return False
+
+
+    def test_requirements():
+        try:
+            pkg_resources.require(open('requirements.txt', mode='r'))
+        except DistributionNotFound:
+            return False
+        except VersionConflict:
+            return False
+        else:
+            return True
+
+
+    if not test_requirements():
+        back = list(pip_sources.items())
+        while not test_url(pip_source_name, pip_source):
+            if not back:
+                input("no valid pip source" + endl)
+                exit()
+            pip_source_name, pip_source = back.pop(0)
+
+        print('use pypi source [%s]' % pip_source_name)
+        param = ['install', '-r', 'requirements.txt', '-i', pip_source, '--trusted-host', urlsplit(pip_source).netloc]
+        if hasattr(pip, 'main'):
+            pip.main(param)
+        else:
+            pip._internal.main(param)
+        if not test_requirements():
+            input("cant install requirements" + endl)
+            exit()
+
 from FFxivPythonTrigger.memory.res import kernel32, structure
 from FFxivPythonTrigger.memory import process, memory
-import ctypes
 import locale
-import sys
 import os
 from json import dumps
 import _thread
 import socket
 import time
+import ctypes
 
 try:
     is_admin = ctypes.windll.shell32.IsUserAnAdmin()
 except:
     is_admin = False
 if not is_admin:
-    ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, sys.argv[0], None, 1)
+    ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, " ".join(sys.argv), None, 1)
     exit()
 
-endl = "\n<press enter to exit>"
-
-name = "ffxiv_dx11.exe"
-pid = None
-print("start searching for game process...")
-while pid is None:
-    for p in process.list_processes():
-        if name in p.szExeFile.decode(locale.getpreferredencoding()).lower():
-            pid = p.th32ProcessID
-            break
-    time.sleep(1)
+pid = args.pid
+if pid is None:
+    print("start searching for game process [%s]..." % args.pName)
+    while pid is None:
+        for p in process.list_processes():
+            if args.pName in p.szExeFile.decode(locale.getpreferredencoding()).lower():
+                pid = p.th32ProcessID
+                break
+        time.sleep(1)
 print("game process pid: %s" % pid)
-time.sleep(3)
+
 handler = kernel32.OpenProcess(structure.PROCESS.PROCESS_ALL_ACCESS.value, False, pid)
 if not handler:
     input("could not open process" + endl)
@@ -39,6 +105,9 @@ if not handler:
 python_version = "python{0}{1}.dll".format(sys.version_info.major, sys.version_info.minor)
 python_lib = process.module_from_name(python_version).filename
 
+print("found python library at :%s" % python_lib)
+
+print("trying to inject python environment into game...")
 # Find or inject python module
 python_module = process.module_from_name(python_version, handler)
 if python_module:
@@ -46,21 +115,23 @@ if python_module:
 else:
     python_lib_h = process.inject_dll(bytes(python_lib, 'ascii'), handler)
     if not python_lib_h:
-        print("inject failed" + endl)
+        input("inject failed" + endl)
         exit()
+print("inject python environment success")
 
 local_handle = kernel32.GetModuleHandleW(python_version)
 
 dif = python_lib_h - local_handle
 funcs = {k: dif + kernel32.GetProcAddress(local_handle, k) for k in [b'Py_InitializeEx', b'PyRun_SimpleString', b'Py_FinalizeEx']}
+print("search calling address success")
 
 param_addr = memory.allocate_memory(4, handler)
 memory.write_memory(ctypes.c_int, param_addr, 1, handler)
 process.start_thread(funcs[b'Py_InitializeEx'], param_addr, handler)
+print("initialize ingame python environment success")
 
 wdir = os.path.abspath('.')
-log_path = os.path.join(wdir, 'out.log').replace("\\", "\\\\")
-err_path = os.path.join(wdir, 'err.log').replace("\\", "\\\\")
+err_path = os.path.join(wdir, 'InjectErr.log').replace("\\", "\\\\")
 shellcode = """
 import sys
 from os import chdir
@@ -79,15 +150,18 @@ finally:
             del sys.modules[key]
 """ % (
     dumps(sys.path),
-    'Entrance.py',
+    args.entrance,
     err_path
 )
 
 shellcode = shellcode.encode('utf-8')
+
+print("shellcode generated, starting to inject shellcode...")
 shellcode_addr = memory.allocate_memory(len(shellcode), handler)
 written = ctypes.c_ulonglong(0)
 memory.write_bytes(shellcode_addr, shellcode, handler=handler)
 _thread.start_new_thread(process.start_thread, (funcs[b'PyRun_SimpleString'], shellcode_addr,), {'handler': handler})
+print("shellcode injected, FFxivPythonTrigger should be started in a few seconds")
 
 print("waiting for initialization...")
 HOST, PORT = "127.0.0.1", 3520
@@ -109,6 +183,7 @@ while True:
             break
         else:
             print(sock.recv(size).decode('utf-8'))
-    except:
+    except Exception:
         break
-process.start_thread(funcs[b'Py_FinalizeEx'], handler=handler)
+input(endl)
+exit()

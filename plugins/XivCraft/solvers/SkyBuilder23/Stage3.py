@@ -1,8 +1,8 @@
 import time
 
 from FFxivPythonTrigger.Logger import debug
-from plugins.XivCraft.simulator.Craft import Craft, CheckUnpass
-from plugins.XivCraft.simulator.Status import DEFAULT_STATUS
+from ...simulator.Craft import Craft, CheckUnpass
+from ...simulator.Status import DEFAULT_STATUS
 
 durReq = 21
 cpReq = 131
@@ -53,7 +53,8 @@ def try_solve(craft: Craft, timeLimit=None):
         t_craft, t_history = queue.pop(0)
         for skill in allowSkills(t_craft):
             try:
-                tt_craft = t_craft.clone().use_skill(skill, True)
+                tt_craft= t_craft.clone()
+                tt_craft.use_skill(skill, True)
             except CheckUnpass:
                 continue
             if tt_craft.current_cp < cpReq:
@@ -76,7 +77,7 @@ class Stage3:
             ans = try_solve(craft, 8)
             if ans is not None:
                 self.queue = ans[1]
-                debug("solver dfs", "new plan in {:.2f}s:{}({})".format(time.perf_counter() - start, self.queue, ans[0].current_quality))
+                debug("solver bfs", "new plan in {:.2f}s:{}({})".format(time.perf_counter() - start, self.queue, ans[0].current_quality))
         return not bool(self.queue)
 
     def deal(self, craft, prev_skill=None):

@@ -152,7 +152,8 @@ class ByregotsBlessing(Skill):
         return 100 + (0 if "内静" not in craft.effects else craft.effects["内静"].param - 1) * 20
 
     def after_use(self, craft):
-        del craft.effects["内静"]
+        if "内静" in craft.effects:
+            del craft.effects["内静"]
 
 
 class PreciseTouch(Skill):
@@ -272,7 +273,7 @@ class Groundwork(Skill):
     _durability = 20
 
     def progress(self, craft):
-        return 150 if craft.current_durability < self.durability(craft) else 300
+        return 150 if craft.current_durability < craft.get_skill_durability(self) else 300
 
 
 class DelicateSynthesis(Skill):
