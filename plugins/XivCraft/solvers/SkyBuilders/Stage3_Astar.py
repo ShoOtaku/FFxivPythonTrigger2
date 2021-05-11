@@ -51,7 +51,7 @@ def allowSkills(craft):
 
 
 def try_solve(craft: Craft, timeLimit=None):
-    best = (craft,[])
+    best = (craft, [])
     best_un_finish = None
     best_start_with = None
     best_start_with_l = 0
@@ -63,11 +63,11 @@ def try_solve(craft: Craft, timeLimit=None):
             return best
         if time.perf_counter() > last_print + 1:
             last_print = time.perf_counter()
-            debug("solver bfs", "plan in {:.2f}s:{}({})".format(last_print - start, best[1], best[0].current_quality))
+            debug("solver astar", "plan in {:.2f}s:{}({})".format(last_print - start, best[1], best[0].current_quality))
         t_craft, t_history = queue.pop(0)
-        if best_start_with is not None and len(t_history)>8 and t_history[:best_start_with_l] != best_start_with:
+        if best_start_with is not None and len(t_history) > 8 and t_history[:best_start_with_l] != best_start_with:
             continue
-        skills=allowSkills(t_craft)
+        skills = allowSkills(t_craft)
         for skill in skills:
             try:
                 try:
@@ -76,12 +76,12 @@ def try_solve(craft: Craft, timeLimit=None):
                 except CheckUnpass:
                     continue
             except Exception:
-                debug("solver bfs", 'error at testing skill %s:\n%s' % (skill, t_craft))
-                debug("solver bfs", format_exc())
+                debug("solver astar", 'error at testing skill %s:\n%s' % (skill, t_craft))
+                debug("solver astar", format_exc())
                 continue
             tt_craft.status = DEFAULT_STATUS()
             new_data = (tt_craft, t_history + [skill])
-            if tt_craft.current_durability >= 1 and (best is None or tt_craft.current_quality > best[0].current_quality):
+            if tt_craft.current_durability >= 1 and tt_craft.current_quality > best[0].current_quality:
                 if tt_craft.current_quality >= tt_craft.recipe.max_quality: return new_data
                 best = new_data
             if skill != "比尔格的祝福":
@@ -106,15 +106,28 @@ class Stage3:
 
     def is_finished(self, craft, prev_skill=None):
         if self.is_first:
-            debug("solver bfs", "try to solve:\n%s" % craft.simple_str())
+            debug("solver astar", "try to solve:\n%s" % craft.simple_str())
             self.is_first = False
         if not bool(self.queue) or craft.status.name in SpecialStatus:
             start = time.perf_counter()
             ans = try_solve(craft, TIME_LIMIT)
             if ans[1]:
-                debug("solver bfs", "new plan in {:.2f}s:{}({})".format(time.perf_counter() - start, ans[1], ans[0].current_quality))
-                self.queue = ans[1]  if time.perf_counter() - start < TIME_LIMIT else ans[1][:4]
+                debug("solver astar", "new plan in {:.2f}s:{}({})".format(time.perf_counter() - start, ans[1], ans[0].current_quality))
+                self.queue = ans[1] # if time.perf_counter() - start < TIME_LIMIT else ans[1][:4]
         return not bool(self.queue)
 
     def deal(self, craft, prev_skill=None):
         return self.queue.pop(0)
+
+
+class StageEnd:
+    def __init__(self):
+        self.queue = ['制作']
+
+    def deal(self, craft, prev_skill=None):
+        if len(self.queue)==1 and craft.current_quality<58000:
+            return 'terminate'
+        return self.queue.pop(0)
+
+    def is_finished(self, craft, prev_skill=None):
+        return not bool(self.queue)
