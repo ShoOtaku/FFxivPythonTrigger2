@@ -1,7 +1,7 @@
 from math import atan2
 
 from FFxivPythonTrigger import *
-command = "@Facing"
+command = "@Facing" #command
 
 class TestFacing(PluginBase):
     name = "TestFacing"
