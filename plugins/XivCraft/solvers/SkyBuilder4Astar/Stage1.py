@@ -16,7 +16,7 @@ class Stage1:
         if prev_skill == '高速制作:fail':
             self.count += 1
         if self.count > 3 or craft.effects['内静'].param < 2 or craft.craft_round >= 20 or craft.current_cp < 300:
-            return 'terminate' 
+            return 'terminate'
         if craft.status == "長持続":
             if not '掌握' in craft.effects: return '掌握'
             if not '崇敬' in craft.effects: return '崇敬'
