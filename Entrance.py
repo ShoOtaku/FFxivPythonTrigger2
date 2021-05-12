@@ -36,7 +36,7 @@ try:
         "SpeedHack",
         "XivCombat",
         "CraftAutomation",
-        "TestFacing"
+        "TestFacing" #背对
     ])
     start()
 except Exception:
