@@ -4,7 +4,6 @@
 
 以下所有插件都会导致**封禁**，不提供任何技术支持，并随时可能失效
 
-
 ## CraftAutomation
 
 自动制作
@@ -68,7 +67,7 @@ function
   
     [set]:          set current coordinates
                     format: /e @tp set [x:float] [y:float] [z:float]
-        
+      
     [list]:         list saved coordinates in current zone
   
     [save]:         save coordinates with a name
@@ -77,10 +76,10 @@ function
     [drop]:         drop a saved coordinates
   
                     format: /e @tp drop [name:str]
-        
+      
     [goto]:         goto a saved coordinates with 15 meters limit
                     format: /e @tp goto [name:str]
-        
+      
     [force-goto]:   goto a saved coordinates with no distance limit
                     format: /e @tp force-goto [name:str]
 
@@ -98,7 +97,7 @@ function
                     s/south
 ```
 
-## TestFacing
+## Facing
 
 背对，必须保持移动才能保证背对
 
