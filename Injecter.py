@@ -75,19 +75,7 @@ from json import dumps
 import _thread
 import socket
 import time
-
 import ctypes
-
-import argparse
-import ctypes
-import sys
-
-parser = argparse.ArgumentParser(description='using to inject FFxivPythonTrigger to a game process')
-parser.add_argument('-p', '--pid', type=int, nargs='?', default=None, metavar='PID', help='pid of process to inject')
-parser.add_argument('-n', '--pName', nargs='?', default="ffxiv_dx11.exe", metavar='Process Name', help='name of process find to inject')
-parser.add_argument('-e', '--entrance', nargs='?', default="Entrance.py", metavar='File Name', help='entrance file of FFxivPythonTrigger')
-args = parser.parse_args(sys.argv[1:])
-
 
 try:
     is_admin = ctypes.windll.shell32.IsUserAnAdmin()
@@ -96,10 +84,6 @@ except:
 if not is_admin:
     ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, " ".join(sys.argv), None, 1)
     exit()
-
-
-
-endl = "\n<press enter to exit>"
 
 pid = args.pid
 if pid is None:
@@ -129,7 +113,7 @@ python_module = process.module_from_name(python_version, handler)
 if python_module:
     python_lib_h = python_module.lpBaseOfDll
 else:
-    python_lib_h = process.inject_dll(bytes(python_lib, 'ascii'), handler)
+    python_lib_h = process.inject_dll(bytes(python_lib, 'utf-8'), handler)
     if not python_lib_h:
         input("inject failed" + endl)
         exit()
@@ -144,10 +128,19 @@ print("search calling address success")
 param_addr = memory.allocate_memory(4, handler)
 memory.write_memory(ctypes.c_int, param_addr, 1, handler)
 process.start_thread(funcs[b'Py_InitializeEx'], param_addr, handler)
-print("initialize ingame python environment success")
 
-wdir = os.path.abspath('.')
-err_path = os.path.join(wdir, 'InjectErr.log').replace("\\", "\\\\")
+print("initialize ingame python environment success")
+application_path = ""
+if getattr(sys, 'frozen', False):
+    application_path = os.path.dirname(sys.executable)
+elif __file__:
+    application_path = os.path.dirname(__file__)
+else:
+    input("application_path not found" + endl)
+    exit()
+
+err_path = os.path.join(application_path, 'InjectErr.log').replace("\\", "\\\\")
+sys.path.insert(0, application_path)
 shellcode = """
 import sys
 from os import chdir
@@ -178,7 +171,7 @@ written = ctypes.c_ulonglong(0)
 memory.write_bytes(shellcode_addr, shellcode, handler=handler)
 _thread.start_new_thread(process.start_thread, (funcs[b'PyRun_SimpleString'], shellcode_addr,), {'handler': handler})
 print("shellcode injected, FFxivPythonTrigger should be started in a few seconds")
-
+print("Everything should be ready in a second. If it is not completed within a period of time, please check the log files.")
 print("waiting for initialization...")
 HOST, PORT = "127.0.0.1", 3520
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
