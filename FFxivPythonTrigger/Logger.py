@@ -4,7 +4,6 @@ from datetime import datetime
 from threading import Lock
 
 
-
 class ModuleTypeException(Exception):
     def __init__(self, module: any):
         super(ModuleTypeException, self).__init__("module type [%s] is an invalid logger module type" % module)
@@ -134,6 +133,10 @@ def log(level: int, module: str, *messages: any) -> None:
     msg_log = Log(level, module, MESSAGES_SEPARATOR.join(map(str, messages)))
     if level >= print_log_level >= 0:
         with _print_lock:
+            if len(print_history) > STORE_MAX:
+                temp = print_history[len(print_history) // 10:]
+                print_history.clear()
+                print_history.extend(temp)
             print_history.append(msg_log)
             for line in msg_log.message.split('\n'):
                 PRINT(LOG_FORMAT.format(header=msg_log.header(), message=line))
@@ -224,6 +227,7 @@ LOG_HEADER_FORMAT: Annotated[str, "the format of log header"] = "[{level}]\t[{ti
 LOG_FORMAT: Annotated[str, "the format of log"] = "{header}\t{message}"
 TIME_FORMAT: Annotated[str, "the format of time"] = "%Y-%m-%d %H:%M:%S.%f"
 TIME_CUTOFF: Annotated[int, "cutoff the time string"] = 3
+STORE_MAX: Annotated[int, "max volume of the history storage"] = 2000
 
 PRINT: Annotated[Callable[[any], None], "the method called for print user seen log"] = print
 print_log_level: Annotated[int, "if the log level is lower then this, it wont be printed"] = INFO

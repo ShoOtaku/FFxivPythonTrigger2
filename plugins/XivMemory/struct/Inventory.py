@@ -2,11 +2,12 @@ from FFxivPythonTrigger.memory.StructFactory import OffsetStruct
 from ctypes import *
 
 InventoryItem = OffsetStruct({
-    'page_type': (c_short, 0),
-    'idx': (c_ubyte, 4),
-    'id': (c_uint, 8),
-    'count': (c_uint, 12),
-    'collectability': (c_ushort, 16),
+    'page_type': (c_short, 0x0),
+    'idx': (c_short, 0x4),
+    'id': (c_uint, 0x8),
+    'count': (c_uint, 0xc),
+    'collectability': (c_ushort, 0x10),
+    'durability': (c_ushort, 0x12),
     'is_hq': (c_bool, 20)
 }, full_size=56)
 

@@ -13,11 +13,13 @@ try:
 
     # core
     register_modules([
-        "HttpApi",
         "ChatLog",
+        "Command",
+        "HttpApi",
         "XivMemory",
         "XivMagic",
-        "Command",
+        "CombatMonitor",
+        "XivNetwork",
     ])
 
     # functions
@@ -29,6 +31,7 @@ try:
         "XivCraft",  # 生产规划器
         # "ACTLogLines",  # act接口
         #"SendKeys",  # 按键发送
+        # "Markings",  # 标点功能
         "PosLocker",
         "SkillAniUnlocker",
         "Teleporter",
