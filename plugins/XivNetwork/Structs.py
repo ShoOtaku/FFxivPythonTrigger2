@@ -15,6 +15,14 @@ class NetworkEventBase(EventBase):
         self.time = msg_time
 
 
+class SendNetworkEventBase(NetworkEventBase):
+    is_send = True
+
+
+class RecvNetworkEventBase(NetworkEventBase):
+    is_send = False
+
+
 class Waymark:
     A = 0
     B = 1
@@ -37,6 +45,7 @@ class ServerActorControlCategory:
     UpdateEffect = 22
     Targetable = 54
     DirectorUpdate = 109
+    SetTargetSign = 502
     LimitBreak = 505
     JobChange = 5
     EffectRemove = 21
@@ -49,12 +58,12 @@ class ServerActionEffectDisplayType:
     MountName = 13
 
 
-class FFXIVBundleHeader(OffsetStruct({
+FFXIVBundleHeader = OffsetStruct({
     'magic0': c_uint,
     'magic1': c_uint,
     'magic2': c_uint,
     'magic3': c_uint,
-    '_epoch': c_ulonglong,
+    'epoch': c_ulonglong,
     'length': c_ushort,
     'unk1': c_ushort,
     'unk2': c_ushort,
@@ -63,10 +72,10 @@ class FFXIVBundleHeader(OffsetStruct({
     'unk3': c_ushort,
     'unk4': c_ushort,
     'unk5': c_ushort,
-})):
-    @property
-    def epoch(self):
-        return (ntohl(self._epoch & 0xFFFFFFFF) << 32) + ntohl(self._epoch >> 32)
+})
+# @property
+# def epoch(self):
+#     return (ntohl(self._epoch & 0xFFFFFFFF) << 32) + ntohl(self._epoch >> 32)
 
 
 ServerMessageHeader = OffsetStruct({
@@ -99,11 +108,21 @@ ServerActionEffectHeader = OffsetStruct({
     'padding': c_ushort,
 })
 
+ServerActionEffectEntry = OffsetStruct({
+    'type': c_ubyte,
+    'param1': c_ubyte,
+    'param2': c_ubyte,
+    'param3': c_ubyte,
+    'param4': c_ubyte,
+    'param5': c_ubyte,
+    'main_param': c_ushort,
+})
+
 ServerActionEffect1 = OffsetStruct({
     'header': ServerActionEffectHeader,
     'padding1': c_uint,
     'padding2': c_ushort,
-    'effects': c_uint * 16 * 1,
+    'effects': ServerActionEffectEntry * 8 * 1,
     'padding3': c_ushort,
     'padding4': c_uint,
     'target_id': c_ulonglong * 1,
@@ -114,7 +133,7 @@ ServerActionEffect8 = OffsetStruct({
     'header': ServerActionEffectHeader,
     'padding1': c_uint,
     'padding2': c_ushort,
-    'effects': c_uint * 16 * 8,
+    'effects': ServerActionEffectEntry * 8 * 8,
     'padding3': c_ushort,
     'padding4': c_uint,
     'target_id': c_ulonglong * 8,
@@ -128,7 +147,7 @@ ServerActionEffect16 = OffsetStruct({
     'header': ServerActionEffectHeader,
     'padding1': c_uint,
     'padding2': c_ushort,
-    'effects': c_uint * 16 * 16,
+    'effects': ServerActionEffectEntry * 8 * 16,
     'padding3': c_ushort,
     'padding4': c_uint,
     'target_id': c_ulonglong * 16,
@@ -142,7 +161,7 @@ ServerActionEffect24 = OffsetStruct({
     'header': ServerActionEffectHeader,
     'padding1': c_uint,
     'padding2': c_ushort,
-    'effects': c_uint * 16 * 24,
+    'effects': ServerActionEffectEntry * 8 * 24,
     'padding3': c_ushort,
     'padding4': c_uint,
     'target_id': c_ulonglong * 24,
@@ -156,7 +175,7 @@ ServerActionEffect32 = OffsetStruct({
     'header': ServerActionEffectHeader,
     'padding1': c_uint,
     'padding2': c_ushort,
-    'effects': c_uint * 16 * 32,
+    'effects': ServerActionEffectEntry * 8 * 32,
     'padding3': c_ushort,
     'padding4': c_uint,
     'target_id': c_ulonglong * 32,
@@ -221,10 +240,7 @@ ServerActorControl144 = OffsetStruct({
 
 ServerActorGauge = OffsetStruct({
     'header': ServerMessageHeader,
-    'param1': c_uint,
-    'param2': c_uint,
-    'param3': c_uint,
-    'param4': c_uint,
+    'buffer': c_ubyte * 16,
 })
 
 ServerStatusEffectAddEntry = OffsetStruct({
@@ -248,26 +264,8 @@ ServerAddStatusEffect = OffsetStruct({
     'damage_shield': c_ubyte,
     'effect_count': c_ubyte,
     'unk1': c_ushort,
-    'effects': ServerStatusEffectAddEntry*4,
-    #'unk2': c_uint,
-})
-
-ServerBossStatusEffectList = OffsetStruct({
-    'header': ServerMessageHeader,
-    'effects_2': c_ubyte * 360,
-    'job_id': c_ubyte,
-    'level_1': c_ubyte,
-    'level_2': c_ubyte,
-    'level_3': c_ubyte,
-    'current_hp': c_uint,
-    'max_hp': c_uint,
-    'current_mp': c_ushort,
-    'max_mp': c_ushort,
-    'unk0': c_ushort,
-    'damage_shield': c_ubyte,
-    'unk1': c_ubyte,
-    'effects_1': c_ubyte * 360,
-    'unk2': c_uint,
+    'effects': ServerStatusEffectAddEntry * 4,
+    # 'unk2': c_uint,
 })
 
 ServerPresetWaymark = OffsetStruct({
@@ -276,6 +274,13 @@ ServerPresetWaymark = OffsetStruct({
     'x': c_int * 8,
     'z': c_int * 8,
     'y': c_int * 8,
+})
+
+ServerStatusEffectListEntry = OffsetStruct({
+    'effect_id': c_ushort,
+    'param': c_ushort,
+    'duration': c_float,
+    'actor_id': c_uint,
 })
 
 ServerStatusEffectList = OffsetStruct({
@@ -291,7 +296,7 @@ ServerStatusEffectList = OffsetStruct({
     'unk0': c_ushort,
     'damage_shield': c_ubyte,
     'unk1': c_ubyte,
-    'effects': c_ubyte * 360,
+    'effects': ServerStatusEffectListEntry * 30,
 })
 
 ServerStatusEffectList2 = OffsetStruct({
@@ -308,21 +313,32 @@ ServerStatusEffectList2 = OffsetStruct({
     'unk1': c_ushort,
     'damage_shield': c_ubyte,
     'unk2': c_ubyte,
-    'effects': c_ubyte * 360,
+    'effects': ServerStatusEffectListEntry * 30,
 })
 
-ServerStatusEffectListEntry = OffsetStruct({
-    'effect_id': c_ushort,
-    'other_info': c_ushort,
-    'duration': c_float,
-    'action_id': c_uint,
+ServerBossStatusEffectList = OffsetStruct({
+    'header': ServerMessageHeader,
+    'effects_2': ServerStatusEffectListEntry * 30,
+    'job_id': c_ubyte,
+    'level_1': c_ubyte,
+    'level_2': c_ubyte,
+    'level_3': c_ubyte,
+    'current_hp': c_uint,
+    'max_hp': c_uint,
+    'current_mp': c_ushort,
+    'max_mp': c_ushort,
+    'unk0': c_ushort,
+    'damage_shield': c_ubyte,
+    'unk1': c_ubyte,
+    'effects_1': ServerStatusEffectListEntry * 30,
+    'unk2': c_uint,
 })
 
 ServerUpdateHpMpTp = OffsetStruct({
     'header': ServerMessageHeader,
     'current_hp': c_uint,
     'current_mp': c_ushort,
-    'unk0': c_ushort,
+    'current_tp': c_ushort,
 })
 
 ServerWaymark = OffsetStruct({

@@ -4,9 +4,9 @@ from typing import Optional
 
 from FFxivPythonTrigger.Logger import Logger
 
-from .Structs import ServerActionEffect1, ServerActionEffect8, ServerActionEffect16
-from .Structs import ServerActionEffect24, ServerActionEffect32, ServerActionEffectHeader
-from .Structs import ServerActionEffectDisplayType, RecvNetworkEventBase as EventBase
+from ..Structs import ServerActionEffect1, ServerActionEffect8, ServerActionEffect16
+from ..Structs import ServerActionEffect24, ServerActionEffect32, ServerActionEffectHeader
+from ..Structs import ServerActionEffectDisplayType, RecvNetworkEventBase as EventBase
 
 _logger = Logger("XivNetwork/ProcessAbility")
 
@@ -60,6 +60,7 @@ SWING_TYPES = {
     0x4: {'healing'},
     0x5: {'blocked', 'ability'},
     0x6: {'parry', 'ability'},
+    0x7: {'invincible'},
     0xA: {'power_drain'},
     0xB: {'power_healing'},
     0xD: {'tp_healing'},
@@ -98,7 +99,7 @@ class ActionEffect(object):
                     self.param += effect_entry.param4 * 65535
                 if self.tags.intersection(TYPE_HAVE_CRITICAL_DIRECT):
                     if effect_entry.param1 & 1: self.tags.add('critical')
-                    if effect_entry.param1 & 1: self.tags.add('direct')
+                    if effect_entry.param1 & 2: self.tags.add('direct')
                 if 'ability' in self.tags:
                     if effect_entry.param3 in ABILITY_TYPE:
                         self.tags |= ABILITY_TYPE[effect_entry.param3]

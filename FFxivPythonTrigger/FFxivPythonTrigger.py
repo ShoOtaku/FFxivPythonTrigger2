@@ -1,11 +1,12 @@
 import sys
 import os
 from pathlib import Path
+from queue import Queue
 from threading import Lock, Thread
-from time import time
+from time import time, sleep, perf_counter
 from traceback import format_exc
 from typing import List, Type, Dict, Set
-from inspect import isclass
+from inspect import isclass, getfile, getsourcelines
 import atexit
 from importlib import import_module, reload
 
@@ -24,7 +25,14 @@ class Mission(Thread):
         self.kwargs = kwargs
 
     def run(self):
-        self.mission(*self.args, **self.kwargs)
+        try:
+            self.mission(*self.args, **self.kwargs)
+        except Exception:
+            _logger.error(f"error occurred in mission {self}:\n{format_exc()}")
+        try:
+            _missions.remove(self)
+        except KeyError:
+            pass
 
 
 class EventBase(object):
@@ -59,12 +67,17 @@ class PluginBase(object):
         self.logger = Logger.Logger(self.name)
         self.storage = Storage.get_module_storage(self.name)
 
-    def create_mission(self, call, *args, **kwargs):
+    def create_mission(self, call, *args, limit_sec=0.1, **kwargs):
         def temp(*_args, **_kwargs):
+            start = perf_counter()
             try:
                 call(*_args, **_kwargs)
             except Exception:
                 self.logger.error("error occurred in mission:" + format_exc())
+            if limit_sec > 0:
+                used = perf_counter() - start
+                if used > limit_sec:
+                    self.logger.warning("[{}:{}] run for {:2f}s".format(getfile(call), getsourcelines(call)[1], used))
 
         with self._lock:
             mId = self._mission_count
@@ -83,7 +96,7 @@ class PluginBase(object):
         register_event(event_id, callback)
 
     def p_start(self):
-        self.create_mission(self._start)
+        self.create_mission(self._start, limit_sec=0)
 
     def p_unload(self):
         for event_id, callback in self._events:
@@ -92,7 +105,10 @@ class PluginBase(object):
             api.unregister(name)
         self._onunload()
         for mission in self._missions:
-            mission.join(-1)
+            try:
+                mission.join(-1)
+            except RuntimeError:
+                pass
         self.storage.save()
 
     def _onunload(self):
@@ -102,10 +118,13 @@ class PluginBase(object):
         pass
 
 
-def log_writer(log: Logger.Log) -> None:
-    with _log_lock, open(_log_path, 'a+') as fo:
-        fo.write(str(log))
-        fo.write('\n')
+def log_writer() -> None:
+    with open(_log_path, 'a+') as fo:
+        while _log_work:
+            if _log_write_buffer.empty():
+                fo.flush()
+            fo.write(str(_log_write_buffer.get()))
+            fo.write('\n')
 
 
 def register_modules(modules: list) -> None:
@@ -184,7 +203,8 @@ def unregister_event(event_id: any, callback: EventCallback):
 
 
 def process_event(event: EventBase):
-    frame_inject.register_once_call(_process_event, event)
+    if event.id in _events or '*' in _events:
+        append_missions(Mission("event", 0, _process_event, event))
 
 
 def _process_event(event: EventBase):
@@ -216,12 +236,13 @@ def close():
     for name in reversed(list(_plugins.keys())):
         unload_plugin(name)
     _storage.save()
-    if frame_inject is not None: frame_inject.uninstall()
+    if frame_inject is not None:
+        frame_inject.uninstall()
 
 
 def append_missions(mission: Mission, guard=True):
     if _allow_create_missions:
-        if guard: _missions.append(mission)
+        if guard:_missions.add(mission)
         mission.start()
         return True
     return False
@@ -232,10 +253,8 @@ def start():
         plugin.p_start()
     if _missions:
         _logger.info('FFxiv Python Trigger started')
-        p = 0
-        while p < len(_missions):
-            _missions[p].join()
-            p += 1
+        while _missions:
+            sleep(0.1)
         _logger.info('FFxiv Python Trigger closed')
     else:
         _logger.info('FFxiv Python Trigger closed (no mission is found)')
@@ -247,6 +266,9 @@ def start():
         for mission in alive_missions:
             _logger.error("mission: " + str(mission))
         close()
+    global _log_work
+    _log_work = False
+    _log_mission.join()
 
 
 def add_path(path: str):
@@ -267,17 +289,18 @@ api = AttrContainer.AttrContainer()
 _storage = Storage.ModuleStorage(Storage.BASE_PATH / STORAGE_DIRNAME)
 _logger = Logger.Logger(LOGGER_NAME)
 _log_path = _storage.path / LOG_FILE_FORMAT.format(int_time=int(time()))
-_log_lock = Lock()
-Logger.log_handler.add((Logger.DEBUG, log_writer))
+_log_work = True
+_log_write_buffer = Queue()
+_log_mission = Mission('logger', -1, log_writer)
+_log_mission.start()
+
+Logger.log_handler.add((Logger.DEBUG, _log_write_buffer.put))
 atexit.register(close)
 
 _plugins: Dict[str, PluginBase] = dict()
-_missions: List[Mission] = list()
+_missions: Set[Mission] = set()
 _events: Dict[any, Set[EventCallback]] = dict()
 _allow_create_missions: bool = True
-
-_am: AddressManager.AddressManager
-frame_inject: FrameInject.FrameInjectHook
 
 _am = AddressManager.AddressManager(_storage.data.setdefault('address', dict()), _logger)
 frame_inject = FrameInject.FrameInjectHook(_am.get("frame_inject", **Sigs.frame_inject))

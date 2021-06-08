@@ -10,7 +10,7 @@ from FFxivPythonTrigger.hook import Hook
 from FFxivPythonTrigger.memory import read_ushort, scan_pattern, read_memory, scan_address
 from FFxivPythonTrigger.memory.StructFactory import OffsetStruct, PointerStruct
 from .simulator import Models, Manager, Craft
-from .solvers import JustDoIt, MacroCraft, SkyBuilders,MacroCraft2
+from .solvers import JustDoIt, SkyBuilders,MacroCraft2
 import win32com.client
 
 speaker = win32com.client.Dispatch("SAPI.SpVoice")
@@ -31,7 +31,6 @@ BaseQualityPtr = PointerStruct(c_uint, 0x60, 0x408)
 
 registered_solvers = [
     JustDoIt.JustDoIt,
-    #MacroCraft.MacroCraft,
     MacroCraft2.MacroCraft,
     SkyBuilders.SkyBuilders,
 ]
@@ -181,11 +180,11 @@ class XivCraft(PluginBase):
 
     def craft_next(self, chat_log, regex_result):
         if regex_result.group(1)!=self.name:return
-        sleep(0.5)
         try:
             skill = Manager.skills[regex_result.group(2) + ('' if regex_result.group(3) != "失败" else ':fail')]()
         except KeyError:
             return
+        sleep(0.5)
         craft = self.get_current_craft()
         if skill == "观察":
             craft.add_effect("观察", 1)

@@ -18,8 +18,8 @@ try:
         "HttpApi",
         "XivMemory",
         "XivMagic",
-        "CombatMonitor",
-        "XivNetwork",
+        #"CombatMonitor",
+        #"XivNetwork",
     ])
 
     # functions
@@ -35,11 +35,14 @@ try:
         "PosLocker",
         "SkillAniUnlocker",
         "Teleporter",
-        "Slider",
+        #"Slider",
         "SpeedHack",
         #"XivCombat",
         "CraftAutomation",
-        "Facing" #背对
+        #"Facing", #背对
+        #"CutTheTree",
+        "CutsceneSkipper",
+
     ])
     start()
 except Exception:
