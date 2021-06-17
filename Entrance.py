@@ -18,8 +18,8 @@ try:
         "HttpApi",
         "XivMemory",
         "XivMagic",
-        #"CombatMonitor",
-        #"XivNetwork",
+        "CombatMonitor",
+        "XivNetwork",
     ])
 
     # functions
@@ -42,6 +42,7 @@ try:
         #"Facing", #背对
         #"CutTheTree",
         "CutsceneSkipper",
+        "MovementNetwork",
 
     ])
     start()

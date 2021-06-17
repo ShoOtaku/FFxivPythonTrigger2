@@ -7,9 +7,9 @@ from ctypes import *
 from traceback import format_exc
 
 from FFxivPythonTrigger.memory import scan_pattern
-from . import DarkKnight, Machinist, Dancer, Gunbreaker, RedMage, Warrior, Bard
+from . import DarkKnight, Machinist, Dancer, Gunbreaker, RedMage, Warrior, Bard,Paladin
 
-combos = DarkKnight.combos | Machinist.combos | Dancer.combos | Gunbreaker.combos | RedMage.combos | Warrior.combos | Bard.combos
+combos = DarkKnight.combos | Machinist.combos | Dancer.combos | Gunbreaker.combos | RedMage.combos | Warrior.combos | Bard.combos | Paladin.combos
 
 # get_icon_sig = "48 89 ? ? ? 48 89 ? ? ? 48 89 ? ? ? 57 48 83 EC ? 8B DA BE" #cn.5.35
 get_icon_sig = "48 89 ? ? ? 48 89 ? ? ? 57 48 83 EC ? 8B DA BE"  # cn.5.40
@@ -59,6 +59,10 @@ class XivCombo(PluginBase):
         self.storage.save()
         self.on_get_icon_hook = OnGetIconHook(get_icon_addr)
         self.on_is_icon_replaceable_hook = OnCheckIsIconReplaceableHook(is_icon_replaceable_addr)
+
+    def _start(self):
+        self.on_get_icon_hook.install()
+        self.on_is_icon_replaceable_hook.install()
         self.on_get_icon_hook.enable()
         self.on_is_icon_replaceable_hook.enable()
 
