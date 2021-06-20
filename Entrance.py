@@ -13,7 +13,7 @@ try:
 
     # core
     register_modules([
-        "ChatLog",
+        "ChatLog2",
         "Command",
         "HttpApi",
         "XivMemory",
@@ -37,7 +37,7 @@ try:
         "Teleporter",
         #"Slider",
         "SpeedHack",
-        #"XivCombat",
+        #"XivCombat2",
         "CraftAutomation",
         #"Facing", #背对
         #"CutTheTree",
