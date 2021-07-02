@@ -9,7 +9,7 @@ class NetworkEventBase(EventBase):
     id = "network"
     name = "network event"
 
-    def __init__(self, raw_msg, msg_time):
+    def __init__(self, msg_time, raw_msg):
         self.is_send = None
         self.raw_msg = raw_msg
         self.time = msg_time
@@ -89,6 +89,8 @@ ServerMessageHeader = OffsetStruct({
     'sec': c_uint,
     'unk4': c_uint,
 })
+
+header_size = sizeof(ServerMessageHeader)
 
 ServerActionEffectHeader = OffsetStruct({
     'header': ServerMessageHeader,
@@ -350,3 +352,29 @@ ServerWaymark = OffsetStruct({
     'z': c_int,
     'y': c_int,
 })
+
+Vector3 = OffsetStruct({
+    'x': c_float,
+    'z': c_float,
+    'y': c_float,
+})
+
+ClientPositionSet = OffsetStruct({
+    'header': ServerMessageHeader,
+    'r': (c_float, header_size),
+    'unk0': (c_ushort, header_size + 0x4),
+    'unk1': (c_ushort, header_size + 0x6),
+    'pos': (Vector3, header_size + 0x8),
+    'unk2': (c_uint, header_size + 0x14),
+}, 24 + header_size)
+
+ClientPositionAdjust = OffsetStruct({
+    'header': ServerMessageHeader,
+    'old_r': (c_float, header_size + 0x0),
+    'new_r': (c_float, header_size + 0x4),
+    'unk0': (c_ushort, header_size + 0x8),
+    'unk1': (c_ushort, header_size + 0xA),
+    'old_pos': (Vector3, header_size + 0xC),
+    'new_pos': (Vector3, header_size + 0x18),
+    'unk2': (c_uint, header_size + 0x24),
+}, 40 + header_size)

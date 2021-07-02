@@ -120,9 +120,17 @@ def get_movement_speed():
 
 def get_party_list(alliance_all=False):
     if alliance_all:
-        return api.XivMemory.party.alliance
-    return api.XivMemory.party.main_party
+        return api.XivMemory.party.alliance()
+    return api.XivMemory.party.main_party()
 
 
 def get_players():
     return query(api.XivMemory.actor_table.get_item(), lambda actor: actor.type == 1)
+
+
+def get_hostiles():
+    return query(api.XivMemory.actor_table.get_item(), lambda actor: actor.can_select and actor.is_hostile)
+
+
+def get_coordinate():
+    return api.Coordinate()

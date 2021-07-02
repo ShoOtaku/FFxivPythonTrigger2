@@ -93,7 +93,7 @@ def bard_dots(data: LogicData):
     if lv > 56 and (need_wind or need_poison) and poison in t_effects and wind in t_effects: return 3560,
     if need_poison: return 100,
     if lv >= 30 and need_wind: return 113,
-    if not song: return
+    if not song or data.config.single == Define.FORCE_SINGLE: return
     cnt = 1
     if song == "paeon":
         cnt_cut = 2
@@ -102,7 +102,7 @@ def bard_dots(data: LogicData):
     else:
         return
     for e in data.valid_enemies:
-        if e.id == data.target.id or e.effectiveDistanceX > 24: continue
+        if e.id == data.target.id or data.actor_distance_effective(e) > 24: continue
         t_effects = e.effects.get_dict(source=data.me.id)
         need_wind = (wind not in t_effects or t_effects[wind].timer < t)
         need_poison = (poison not in t_effects or t_effects[poison].timer < t)
@@ -117,6 +117,29 @@ def bard_dots(data: LogicData):
             return 100, e.id
         if lv >= 30 and need_wind:
             return 113, e.id
+
+
+def song_logic(data: LogicData) -> Optional[int]:
+    song = data.gauge.songType.value()
+    song_end = not song or data.gauge.songMilliseconds / 1000 <= (data.gcd_total + data.gcd if song == 'paeon' else data.gcd)
+
+    song_strategy = data.config.custom_settings.setdefault('song_strategy', '80')
+    if data.me.level < 30:
+        return
+    elif data.me.level < 40:
+        if not data[114]: return 114
+    elif data.me.level < 52:
+        if not data[116] and data[114] < 29 and song_end: return 116
+        if not data[114] and song_end: return 114
+    else:
+        is_p = song_strategy == '80' and song == "paeon" and data.gauge.songProcs > 3 and max([data[3559], data[114]]) <= 30
+        if is_single(data, 3):
+            if not data[3559] and (song_end or is_p): return 3559
+            if not data[114] and (song_end or is_p): return 114
+        else:
+            if not data[114] and (song_end or is_p): return 114
+            if not data[3559] and (song_end or is_p): return 3559
+        if not data[116] and song_end: return 116
 
 
 class BardLogic(Strategy):
@@ -149,34 +172,20 @@ class BardLogic(Strategy):
             need_wind = (wind not in t_effects or t_effects[wind].timer < data.gcd_total) and data.time_to_kill_target > 10
             full_dot = not (need_poison or need_wind)
             if not data[101] and full_dot:
-                if data.config.ability_cnt and data.gcd > 1:
+                if data.config.ability_cnt and data.gcd > 1.5:
                     return
-                elif data.gcd <= 1:
+                elif data.gcd <=  1.5:
                     return UseAbility(101)
             if not data[118] and data[101] > 10 and song: return UseAbility(118)
             if not data[107] and full_dot and 122 not in data.effects and 125 in data.effects: return UseAbility(107)
             if not data[3562] and full_dot: return UseAbility(16494 if not is_single(data, 1) and lv >= 72 else 3562)
-            song_end = not song or data.gauge.songMilliseconds < data.gcd
-            is_p = song == "paeon" and data.gauge.songProcs > 3 and max([data[3559], data[114]]) <= 30
-            is_p = is_p and (data.config.custom_settings.setdefault('song_strategy', '80') == '80' or data.gauge.songMilliseconds < data.gcd)
+
             if perf_counter() - self.last_song > 3:
-                if is_single(data, 3):
-                    if not data[3559] and (song_end or is_p):
-                        self.last_song = perf_counter()
-                        return UseAbility(3559)
-                    if not data[114] and (song_end or is_p):
-                        self.last_song = perf_counter()
-                        return UseAbility(114)
-                else:
-                    if not data[114] and (song_end or is_p):
-                        self.last_song = perf_counter()
-                        return UseAbility(114)
-                    if not data[3559] and (song_end or is_p):
-                        self.last_song = perf_counter()
-                        return UseAbility(3559)
-                if not data[116] and song_end:
+                song_to_use = song_logic(data)
+                if song_to_use is not None:
                     self.last_song = perf_counter()
-                    return UseAbility(116)
+                    return UseAbility(song_to_use)
+
         if song == "minuet" and data.gauge.songProcs > (2 if data.gauge.songMilliseconds > data.gcd_total * 1000 else 0): return UseAbility(7404)
         if not data[110]: return UseAbility(117 if not is_single(data, 2) and lv >= 45 else 110)
         if not data[3558] and (lv < 68 or song): return UseAbility(3558)

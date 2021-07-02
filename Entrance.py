@@ -11,7 +11,7 @@ Logger.print_log_level = Logger.DEBUG
 try:
     register_module("SocketLogger")
 
-    # core
+    "core"
     register_modules([
         "ChatLog2",
         "Command",
@@ -21,16 +21,15 @@ try:
         "CombatMonitor",
         "XivNetwork",
     ])
-
-    # functions
+    "functions"
     register_modules([
         #"MoPlus",  # 鼠标功能增强
         #"ActorQuery",  # actor 查询
-        "Zoom2",  # 视距解限
+        #"Zoom2",  # 视距解限
         #"XivCombo",  # 连击绑定（一键系列）
-        "XivCraft",  # 生产规划器
+        #"XivCraft",  # 生产规划器
         # "ACTLogLines",  # act接口
-        #"SendKeys",  # 按键发送
+        "SendKeys",  # 按键发送
         # "Markings",  # 标点功能
         "PosLocker",
         "SkillAniUnlocker",
@@ -42,7 +41,9 @@ try:
         #"Facing", #背对
         #"CutTheTree",
         "CutsceneSkipper",
-        "MovementNetwork",
+        "CutTheTree",
+        #"MovementNetwork",
+        #"AFix",
 
     ])
     start()

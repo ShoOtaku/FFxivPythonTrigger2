@@ -1,9 +1,10 @@
 from FFxivPythonTrigger.Logger import Logger
 from FFxivPythonTrigger import FFxiv_Version
 
+from ..Structs import RecvNetworkEventBase, ServerMessageHeader, header_size
 from .Opcodes import opcodes
 from . import AddStatusEffect, Ability, ActorCast, ActorControl142, StatusEffectList, ActorControl143, Ping
-from . import ActorControl144,ActorGauge,ActorUpdateHpMpTp
+from . import ActorControl144, ActorGauge, ActorUpdateHpMpTp
 
 _logger = Logger("XivNetwork/RecvProcessors")
 
@@ -26,9 +27,25 @@ _processors = {
     'Ping': Ping.get_event,
 }
 
+
+class UndefinedRecv(RecvNetworkEventBase):
+    def __init__(self, msg_time, raw_msg):
+        self.header = ServerMessageHeader.from_buffer(raw_msg)
+        super().__init__(msg_time, raw_msg[header_size:])
+
+
 processors = dict()
-_opcodes = opcodes.setdefault(FFxiv_Version,dict())
-for k, p in _processors.items():
-    if k not in _opcodes:continue
-    _logger.debug(f"load opcode of [{k}]({hex(_opcodes[k])})")
-    processors[_opcodes[k]] = p
+
+_undefined_evt_class = dict()
+version_opcodes = opcodes.setdefault(FFxiv_Version, dict())
+
+for key, opcode in version_opcodes.items():
+    if key not in _processors:
+        _logger.debug(f"load opcode of [{key}]({hex(opcode)}) - no processor defined")
+        processors[opcode] = type(f'RecvUndefined_{key}', (UndefinedRecv,), {
+            'id': f"network/undefined_recv/{key}",
+            'name': f"network undefined recv - {key}",
+        })
+    else:
+        _logger.debug(f"load opcode of [{key}]({hex(opcode)})")
+        processors[opcode] = _processors[key]

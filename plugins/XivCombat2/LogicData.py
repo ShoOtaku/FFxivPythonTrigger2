@@ -1,4 +1,5 @@
 from functools import cached_property, lru_cache
+from math import sqrt
 from typing import TYPE_CHECKING
 
 from FFxivPythonTrigger import Utils, SaintCoinach
@@ -79,11 +80,11 @@ class LogicData(object):
 
     @cached_property
     def valid_party(self):
-        return [member.actor for member in Api.get_party_list() if member.id and member.actor.can_select]
+        return [member.actor for member in Api.get_party_list() if member.actor is not None and member.actor.can_select]
 
     @cached_property
     def valid_alliance(self):
-        return [member.actor for member in Api.get_party_list(alliance_all=True) if member.id and member.actor.can_select]
+        return [member.actor for member in Api.get_party_list(alliance_all=True) if member.actor is not None and member.actor.can_select]
 
     @cached_property
     def valid_players(self):
@@ -91,10 +92,24 @@ class LogicData(object):
 
     @cached_property
     def valid_enemies(self):
-        enemies = Utils.query(Api.get_enemies_iter(), key=lambda x: x.can_select)
-        enemies = Api.get_actors_by_id(*[enemy.id for enemy in enemies])
+        enemies = Api.get_actors_by_id(*{enemy.id for enemy in Utils.query(Api.get_enemies_iter(), key=lambda x: x.can_select)})
         enemies = [enemy for enemy in enemies if is_actor_status_can_damage(enemy)]
+        if self.config.enable_extra_enemies:
+            enemy_id = {enemy.id for enemy in Api.get_enemies_iter()}
+            extra_enemies = list()
+            for enemy in Api.get_hostiles():
+                if enemy.id not in enemy_id and self.valid_extra_enemies(enemy):
+                    extra_enemies.append(enemy)
+            enemies += extra_enemies
         return sorted(enemies, key=lambda enemy: enemy.effectiveDistanceX)
+
+    @lru_cache
+    def valid_extra_enemies(self, enemy):
+        if enemy.effectiveDistanceY > self.config.extra_enemies_distance: return False
+        if abs(enemy.pos.z - self.me.pos.z) > 5: return False
+        if enemy.currentHP < 2: return False
+        if self.config.extra_enemies_combat_only and not enemy.is_in_combat: return False
+        return True
 
     @lru_cache
     def dps(self, actor_id):
@@ -183,3 +198,19 @@ class LogicData(object):
     @cached_property
     def is_moving(self):
         return bool(Api.get_movement_speed())
+
+    @lru_cache
+    def actor_distance_effective(self, target_actor):
+        t_pos = target_actor.pos
+        m_pos = self.coordinate
+        return sqrt((t_pos.x - m_pos.x) ** 2 + (t_pos.y - m_pos.y) ** 2) - self.me.HitboxRadius - target_actor.HitboxRadius
+
+    @cached_property
+    def target_distance(self):
+        t = self.target
+        if t is None: return 1e+99
+        return self.actor_distance_effective(t)
+
+    @cached_property
+    def coordinate(self):
+        return Api.get_coordinate()

@@ -182,7 +182,7 @@ class XivCombat2(PluginBase):
         # 获取决策行为
         to_use = None
         if data.gcd < 0.2: self.config.ability_cnt = 0
-        process_non_gcd = data.gcd > 0.7 and self.config.ability_cnt < int(data.gcd_total) or data.gcd == 0
+        process_non_gcd = data.gcd > 0.9 and self.config.ability_cnt < int(data.gcd_total) or data.gcd == 0
         strategy = self.config.get_strategy(data.job)
         if strategy is not None and (not strategy.fight_only or data.valid_enemies):
             self.is_working = True
@@ -209,8 +209,11 @@ class XivCombat2(PluginBase):
             if to_use.target_id is None:
                 target = data.target
                 to_use.target_id = data.me.id if target is None else target.id
+            if Api.get_current_target() is None:
+                Api.set_current_target(Api.get_actor_by_id(to_use.target_id))
             if isinstance(to_use, Strategy.UseAbility) and Api.skill_queue_is_empty():
-                # self.logger(action_sheet[to_use.ability_id]['Name'])
+                # actor=Api.get_actor_by_id(to_use.target_id)
+                # self.logger.debug(f"use:{action_sheet[to_use.ability_id]['Name']} on {actor.Name}({hex(actor.id)[2:]}/{bin(actor.unitStatus1)}/{bin(actor._uint_0x98)}")
                 use_ability(to_use)
             elif isinstance(to_use, Strategy.UseItem):  # 使用道具，应该只有食物或者爆发药吧？
                 use_item(to_use)
@@ -265,6 +268,10 @@ class XivCombat2(PluginBase):
                 except ValueError:
                     key = args[1]
             return self.config.set_strategy(key, args[2])
+        elif args[0] == "target":
+            old = self.config.target.copy()
+            self.config.target = args[1:]
+            return f"{old} => {self.config.target}"
         elif args[0] == "query" or args[0] == "q":
             if len(args) < 4:
                 t = Api.get_current_target()
@@ -306,6 +313,29 @@ class XivCombat2(PluginBase):
             else:
                 return f"unknown args: [{args[2]}]"
             return f"{'enable' if a else 'disable'} {action_sheet[s]['Name']}"
+        elif args[0] == "extra_enemies":
+            if len(args) < 2:
+                return f"enable:{self.config.enable_extra_enemies}, combat_only:{self.config.extra_enemies_combat_only}"
+            elif args[1] == "enable":
+                self.config.enable_extra_enemies = True
+            elif args[1] == "disable":
+                self.config.enable_extra_enemies = False
+            elif args[1] == "combat_only":
+                if len(args) < 3:
+                    return self.config.extra_enemies_combat_only
+                elif args[2] == "enable":
+                    self.config.extra_enemies_combat_only = True
+                elif args[2] == "disable":
+                    self.config.extra_enemies_combat_only = False
+                else:
+                    return f"unknown args: [{args[2]}]"
+            elif args[1] == "distance":
+                if len(args) < 3:
+                    return self.config.extra_enemies_distance
+                else:
+                    self.config.extra_enemies_distance = int(args[2])
+            else:
+                return f"unknown args: [{args[1]}]"
         elif args[0] == "set":
             self.config.custom_settings[args[1]] = ' '.join(args[2:])
             return self.config.custom_settings
@@ -318,7 +348,7 @@ class XivCombat2(PluginBase):
             if ans is not None:
                 api.Magic.echo_msg(ans)
             self.save_config()
-            self.logger(self.config.get_dict())
+            # self.logger(self.config.get_dict())
         except Exception as e:
             self.logger.error(format_exc())
             api.Magic.echo_msg(e)
