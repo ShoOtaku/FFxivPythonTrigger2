@@ -1,5 +1,4 @@
 from ctypes import *
-from socket import ntohl
 
 from FFxivPythonTrigger.memory.StructFactory import OffsetStruct
 from FFxivPythonTrigger import EventBase
@@ -9,8 +8,7 @@ class NetworkEventBase(EventBase):
     id = "network"
     name = "network event"
 
-    def __init__(self, raw_msg, msg_time):
-        self.is_send = None
+    def __init__(self, msg_time, raw_msg):
         self.raw_msg = raw_msg
         self.time = msg_time
 
@@ -89,6 +87,8 @@ ServerMessageHeader = OffsetStruct({
     'sec': c_uint,
     'unk4': c_uint,
 })
+
+header_size = sizeof(ServerMessageHeader)
 
 ServerActionEffectHeader = OffsetStruct({
     'header': ServerMessageHeader,
@@ -349,4 +349,10 @@ ServerWaymark = OffsetStruct({
     'x': c_int,
     'z': c_int,
     'y': c_int,
+})
+
+Vector3 = OffsetStruct({
+    'x': c_float,
+    'z': c_float,
+    'y': c_float,
 })

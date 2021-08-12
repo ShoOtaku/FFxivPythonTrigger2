@@ -1,3 +1,5 @@
+import os
+
 from aiohttp import web, WSMsgType
 import time
 import json
@@ -14,6 +16,9 @@ command = "@WebChat"
 
 class WebChat(PluginBase):
     name = "WebChat"
+    git_repo = 'nyaoouo/FFxivPythonTrigger2'
+    repo_path = 'plugins/WebChat'
+    hash_path = os.path.dirname(__file__)
 
     async def root_handler(self, request):
         return web.HTTPFound('/index.html')
@@ -90,11 +95,16 @@ class WebChat(PluginBase):
 
     def deal_chat_log(self, event):
         set_event_loop(self.loop)
-        data = event.get_dict()
+        data = {
+            't': event.chat_log.timestamp,
+            'c': event.channel_id,
+            's': event.player,
+            'm': event.message
+        }
         self.chatLogCache.append(data)
         if len(self.chatLogCache) > 500:
             self.chatLogCache = self.chatLogCache[-200:]
-        for cid, client in self.clients.items():
+        for cid, client in self.clients.copy().items():
             run(client.send_json(data))
 
     async def _stop_server(self):
@@ -141,7 +151,7 @@ class WebChat(PluginBase):
                 else:
                     if len(args) > 1:
                         self.server_config['port'] = int(args[1])
-                    self.create_mission(self.start_server,limit_sec=0)
+                    self.create_mission(self.start_server, limit_sec=0)
             elif args[0] == 'close':
                 self.server_config['start_default'] = False
                 if self.work:

@@ -27,6 +27,9 @@ functions (*[arg] is optional args):
 
 class CommandPlugin(PluginBase):
     name = "command controller"
+    git_repo = 'nyaoouo/FFxivPythonTrigger2'
+    repo_path = 'plugins/Command'
+    hash_path = os.path.dirname(__file__)
 
     def FptManager(self, args):
         if args[0] == 'close':
@@ -41,6 +44,8 @@ class CommandPlugin(PluginBase):
             api.Magic.echo_msg("\n".join(list_plugin_names()))
         elif args[0] == 'log':
             self.logger.info(" ".join(args[1:]))
+        elif args[0] == 'eval':
+            exec(" ".join(args[1:]))
         elif args[0] == 'kill!':
             write_ubytes(frame_inject.address, bytearray(b'\x90' * 99))
 

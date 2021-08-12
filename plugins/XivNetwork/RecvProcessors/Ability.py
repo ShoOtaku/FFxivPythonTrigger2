@@ -117,8 +117,8 @@ class RecvActionEffectEvent(EventBase):
     id = "network/action_effect"
     name = "network action effect"
 
-    def __init__(self, raw_msg, msg_time, actor_id, max_count):
-        super().__init__(raw_msg, msg_time)
+    def __init__(self,  msg_time, raw_msg,actor_id, max_count):
+        super().__init__(msg_time,raw_msg)
         self.source_id = actor_id
         header = raw_msg.header
         if header.effect_display_type == ServerActionEffectDisplayType.MountName:
@@ -129,7 +129,7 @@ class RecvActionEffectEvent(EventBase):
             self.action_type = "action"
         else:
             self.action_type = "unknown_%s" % header.effect_display_type
-        self.action_id = header.action_id
+        self.action_id = header.action_animation_id if self.action_type=="action" else header.action_id
         effect_count = min(header.effect_count, max_count)
         self.targets = dict()
         for i in range(effect_count):
@@ -146,4 +146,4 @@ class RecvActionEffectEvent(EventBase):
 
 def get_event(msg_time: datetime, msg, max_count: int) -> Optional[EventBase]:
     actor_id = msg.header.header.actor_id
-    return RecvActionEffectEvent(msg, msg_time, actor_id, max_count)
+    return RecvActionEffectEvent(msg_time, msg, actor_id, max_count)

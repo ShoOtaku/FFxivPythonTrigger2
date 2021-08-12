@@ -13,6 +13,9 @@ pattern_actor_move = "40 53 48 83 EC ? F3 0F 11 89 ? ? ? ? 48 8B D9 F3 0F 11 91 
 
 class PosLocker(PluginBase):
     name = "PosLocker"
+    git_repo = 'nyouoG/fpt_plugins'
+    repo_path = 'PosLocker.py'
+    hash_path = __file__
 
     def __init__(self):
         super().__init__()
@@ -58,6 +61,7 @@ class PosLocker(PluginBase):
         api.Magic.echo_msg("pl: [%s]" % ('enable' if self._enable else 'disable'))
 
     def _start(self):
+        self.hook.install()
         self.hook.enable()
 
     def _onunload(self):

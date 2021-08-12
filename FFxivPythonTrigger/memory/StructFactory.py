@@ -17,6 +17,7 @@ def get_data(data, full=False):
 class _OffsetStruct(Structure):
     _pack_ = 1
     raw_fields: Dict[str, Tuple[any, int]] = None
+    extra_properties: list[str] = []
 
     def get_data(self, full=False):
         return get_data(self, full)
@@ -27,10 +28,18 @@ class _OffsetStruct(Structure):
     def get_full_item(self):
         for k, _ in self._fields_:
             yield k, getattr(self, k)
+        for k in self.extra_properties:
+            yield k, getattr(self, k)
 
     def get_item(self):
         for k in self.raw_fields.keys():
+            if not k.startswith('_'):
+                yield k, getattr(self, k)
+        for k in self.extra_properties:
             yield k, getattr(self, k)
+
+    def __hash__(self):
+        return addressof(self)
 
 
 def _(res) -> Tuple[any, int]:
@@ -43,7 +52,7 @@ def pad_unk(current: int, target: int):
     return c_uint, 4, "uint"
 
 
-def OffsetStruct(fields: dict, full_size: int = None) -> Type[_OffsetStruct]:
+def OffsetStruct(fields: dict, full_size: int = None, extra_properties: list[str] = None) -> Type[_OffsetStruct]:
     set_fields = []
     current_size = 0
     for name, data in sorted(fields.items(), key=lambda x: _(x[1])[1]):
@@ -65,10 +74,9 @@ def OffsetStruct(fields: dict, full_size: int = None) -> Type[_OffsetStruct]:
             t, s, n = pad_unk(current_size, full_size)
             set_fields.append((f"_{n}_{hex(current_size)}", t))
             current_size += s
-    return type("OffsetStruct", (_OffsetStruct,), {
-        'raw_fields': fields,
-        '_fields_': set_fields,
-    })
+    d = {'raw_fields': fields, '_fields_': set_fields, }
+    if extra_properties is not None: d['extra_properties'] = extra_properties
+    return type("OffsetStruct", (_OffsetStruct,), d)
 
 
 class _PointerStruct(c_void_p):
@@ -92,7 +100,7 @@ def PointerStruct(i_d_type: any, *i_shifts: int) -> Type[_PointerStruct]:
 
 
 class _EnumStruct(Structure):
-    _default:any
+    _default: any
     _data: dict
     _reverse: dict
 

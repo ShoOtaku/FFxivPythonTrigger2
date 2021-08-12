@@ -1,28 +1,32 @@
 import sys
 import os
+from functools import cached_property
 from pathlib import Path
 from queue import Queue
 from threading import Lock, Thread
 from time import time, sleep, perf_counter
 from traceback import format_exc
-from typing import List, Type, Dict, Set
+from typing import List, Type, Dict, Set, Optional
 from inspect import isclass, getfile, getsourcelines
 import atexit
 from importlib import import_module, reload
 
 from . import AttrContainer, Storage, Logger, FrameInject, Sigs, AddressManager
+from .CheckGitUpdate import get_last_update, check_update
+from .Utils import get_hash
 
 LOG_FILE_SIZE_MAX = 1024 * 1024
 
 
 class Mission(Thread):
-    def __init__(self, name: str, mission_id: int, mission, *args, **kwargs):
+    def __init__(self, name: str, mission_id: int, mission, *args, callback=None, **kwargs):
         super(Mission, self).__init__(name="%s#%s" % (name, mission_id))
         self.name = name
         self.mission_id = mission_id
         self.mission = mission
         self.args = args
         self.kwargs = kwargs
+        self.callback = callback
 
     def run(self):
         try:
@@ -33,6 +37,11 @@ class Mission(Thread):
             _missions.remove(self)
         except KeyError:
             pass
+        if self.callback is not None:
+            try:
+                self.callback(self)
+            except Exception:
+                _logger.error(f"error occurred in mission recall {self}:\n{format_exc()}")
 
 
 class EventBase(object):
@@ -47,27 +56,51 @@ class EventBase(object):
 
 
 class EventCallback(object):
-    def __init__(self, plugin, call):
+    def __init__(self, plugin, call, limit_sec=None):
         self.plugin = plugin
         self._call = call
+        self.limit_sec = limit_sec
 
     def call(self, event: EventBase):
-        self.plugin.create_mission(self._call, event)
+        if self.limit_sec is not None:
+            self.plugin.create_mission(self._call, event, limit_sec=self.limit_sec)
+        else:
+            self.plugin.create_mission(self._call, event)
 
 
 class PluginBase(object):
     name = "unnamed_plugin"
+    git_repo = ''
+    repo_path = ''
+    hash_path = ''
+    time_version = 0.
+    main_mission: Optional[Mission]
+    save_when_unload = True
+
+    @cached_property
+    def last_update_time(self):
+        phash = self.plugin_hash
+        if phash is None: return 0.
+        t = get_last_update(self.name, phash, self.logger)
+        _storage.save()
+        return t
+
+    @cached_property
+    def plugin_hash(self):
+        if self.hash_path:
+            return get_hash(self.hash_path)
 
     def __init__(self):
         self._events = list()
         self._apis = list()
         self._mission_count = 0
-        self._missions = list()
+        self._missions = dict()
         self._lock = Lock()
+        self.main_mission = None
         self.logger = Logger.Logger(self.name)
         self.storage = Storage.get_module_storage(self.name)
 
-    def create_mission(self, call, *args, limit_sec=0.1, **kwargs):
+    def create_mission(self, call, *args, limit_sec=0.1, **kwargs) -> Mission:
         def temp(*_args, **_kwargs):
             start = perf_counter()
             try:
@@ -82,21 +115,30 @@ class PluginBase(object):
         with self._lock:
             mId = self._mission_count
             self._mission_count += 1
-        mission = Mission(self.name, mId, temp, *args, **kwargs)
+
+        def callback(m):
+            if mId in self._missions:
+                del self._missions[mId]
+
+        mission = Mission(self.name, mId, temp, *args, callback=callback, **kwargs)
+
         if append_missions(mission):
-            self._missions.append(mission)
+            self._missions[mId] = mission
+        return mission
 
     def register_api(self, name: str, api_object: any):
         self._apis.append(name)
         api.register(name, api_object)
 
-    def register_event(self, event_id, call):
-        callback = EventCallback(self, call)
+    def register_event(self, event_id, call, limit_sec=None):
+        callback = EventCallback(self, call, limit_sec)
         self._events.append((event_id, callback))
         register_event(event_id, callback)
 
     def p_start(self):
-        self.create_mission(self._start, limit_sec=0)
+        self.main_mission = self.create_mission(self._start, limit_sec=0)
+        if self.git_repo and self.repo_path and self.plugin_hash is not None:
+            self.create_mission(check_update, self.logger, self.git_repo, self.repo_path, self.last_update_time, limit_sec=5)
 
     def p_unload(self):
         for event_id, callback in self._events:
@@ -104,12 +146,13 @@ class PluginBase(object):
         for name in self._apis:
             api.unregister(name)
         self._onunload()
-        for mission in self._missions:
+        for mission in list(self._missions.values()):
             try:
                 mission.join(-1)
             except RuntimeError:
                 pass
-        self.storage.save()
+        if self.save_when_unload:
+            self.storage.save()
 
     def _onunload(self):
         pass
@@ -236,14 +279,24 @@ def close():
     for name in reversed(list(_plugins.keys())):
         unload_plugin(name)
     _storage.save()
-    if frame_inject is not None:
+    if frame_inject is not None and frame_inject.is_installed:
         frame_inject.uninstall()
 
 
-def append_missions(mission: Mission, guard=True):
-    if _allow_create_missions:
-        if guard:_missions.add(mission)
+def mission_starter():
+    while True:
+        mission, guard = _missions_buffer.get()
+        if guard: _missions.add(mission)
         mission.start()
+
+
+def append_missions(mission: Mission, guard=True, put_buffer=True):
+    if _allow_create_missions:
+        if put_buffer:
+            _missions_buffer.put((mission, guard))
+        else:
+            if guard: _missions.add(mission)
+            mission.start()
         return True
     return False
 
@@ -251,6 +304,7 @@ def append_missions(mission: Mission, guard=True):
 def start():
     for plugin in _plugins.values():
         plugin.p_start()
+    append_missions(Mission("check_update_core", 0, check_update, _logger, "nyaoouo/FFxivPythonTrigger2", "FFxivPythonTrigger", core_last_update))
     if _missions:
         _logger.info('FFxiv Python Trigger started')
         while _missions:
@@ -269,6 +323,7 @@ def start():
     global _log_work
     _log_work = False
     _log_mission.join()
+    _missions_starter_mission.join()
 
 
 def add_path(path: str):
@@ -286,6 +341,12 @@ LOGGER_NAME = "Main"
 
 api = AttrContainer.AttrContainer()
 
+
+_missions_buffer = Queue()
+_missions: Set[Mission] = set()
+_missions_starter_mission = Mission('mission_starter',-1,mission_starter)
+_missions_starter_mission.start()
+
 _storage = Storage.ModuleStorage(Storage.BASE_PATH / STORAGE_DIRNAME)
 _logger = Logger.Logger(LOGGER_NAME)
 _log_path = _storage.path / LOG_FILE_FORMAT.format(int_time=int(time()))
@@ -298,14 +359,14 @@ Logger.log_handler.add((Logger.DEBUG, _log_write_buffer.put))
 atexit.register(close)
 
 _plugins: Dict[str, PluginBase] = dict()
-_missions: Set[Mission] = set()
 _events: Dict[any, Set[EventCallback]] = dict()
 _allow_create_missions: bool = True
 
 _am = AddressManager.AddressManager(_storage.data.setdefault('address', dict()), _logger)
 frame_inject = FrameInject.FrameInjectHook(_am.get("frame_inject", **Sigs.frame_inject))
+
+frame_inject.install()
 frame_inject.enable()
-_storage.save()
 
 plugin_path = Path(os.getcwd()) / 'plugins'
 plugin_path.mkdir(exist_ok=True)
@@ -313,4 +374,7 @@ sys.path.insert(0, str(plugin_path))
 for path in _storage.data.setdefault('paths', list()):
     _logger.debug("add plugin path:%s" % path)
     sys.path.insert(0, path)
+
+core_last_update = get_last_update(None, get_hash(os.path.dirname(__file__)), _logger)
+
 _storage.save()

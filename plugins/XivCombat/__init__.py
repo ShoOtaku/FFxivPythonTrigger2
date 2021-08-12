@@ -1,10 +1,15 @@
+from ctypes import *
+
 from FFxivPythonTrigger import PluginBase, api, frame_inject, SaintCoinach
 # from Lumina.Excel.GeneratedSheets import Action
 from traceback import format_exc
 from time import perf_counter
 
+from FFxivPythonTrigger.AddressManager import AddressManager
 from FFxivPythonTrigger.AttrContainer import AttributeNotFoundException
 from FFxivPythonTrigger.Logger import debug
+from FFxivPythonTrigger.hook import Hook
+from FFxivPythonTrigger.memory import scan_pattern
 from . import LogicData
 
 # action_sheet = lumina.lumina.GetExcelSheet[Action]()
@@ -15,7 +20,7 @@ fight_strategies = dict()
 common_strategies = dict()
 is_area_action_cache = dict()
 
-from . import Machinist, Gunbreaker, DarkKnight, Warrior, Dancer, Summoner
+from . import Machinist, Gunbreaker, DarkKnight, Warrior, Dancer, Summoner, Paladin, Bard
 
 fight_strategies |= Machinist.fight_strategies
 fight_strategies |= Gunbreaker.fight_strategies
@@ -23,6 +28,8 @@ fight_strategies |= DarkKnight.fight_strategies
 fight_strategies |= Warrior.fight_strategies
 fight_strategies |= Dancer.fight_strategies
 fight_strategies |= Summoner.fight_strategies
+fight_strategies |= Paladin.fight_strategies
+fight_strategies |= Bard.fight_strategies
 
 common_strategies |= Dancer.common_strategies
 
@@ -63,26 +70,72 @@ class XivCombat(PluginBase):
 
     def __init__(self):
         super().__init__()
+
+        class ForceActionHook(Hook):
+            restype = c_int64
+            argtypes = [c_int64, c_uint, c_uint, c_int64, c_uint, c_uint, c_int]
+
+            def hook_function(_self, action_manager_addr, action_type, action_id, target_id, unk1, unk2, unk3):
+                original = self.state['use']
+                self.state['use'] = False
+                if self.is_processing and self.work:
+                    if action_type == 1:
+                        use_skill(action_id, target_id)
+                    elif action_type == 2 or action_type == 5:
+                        api.XivMemory.combat_data.skill_ani_lock = 0
+                a = _self.original(action_manager_addr, action_type, action_id, target_id, unk1, unk2, unk3)
+                self.state['use'] = original
+                return a
+
+        self.force_action_hook = ForceActionHook(
+            AddressManager(self.storage.data, self.logger)
+                .get('do_action', scan_pattern, "40 53 55 57 41 54 41 57 48 83 EC ? 83 BC 24 ? ? ? ? ?")
+        )
+        self.storage.save()
+
         self.state = self.storage.data.setdefault('config', dict())
         self.state.setdefault('use', False)
         self.state.setdefault('single', True)
         self.state.setdefault('violent', True)
         self.state.setdefault('find', False)
         self.work = False
+        self.is_processing = False
 
         self.nAbility = [None, 0]
         self.nSkill = [None, 0]
         api.command.register(command, self.process_command)
+        self.register_event("network/action_effect", self.deal_network_action)
         frame_inject.register_continue_call(self.action)
         self.next_work_time = 0
         self.count_error = 0
 
         api.Magic.echo_msg(self.get_status_string())
 
+    def deal_network_action(self, evt):
+        if evt.source_id != api.XivMemory.actor_table.get_me().id or evt.action_type != 'action':
+            return
+        for t_id, effects in evt.targets.items():
+            if t_id < 0x40000000: continue
+            is_invincible = False
+            for effect in effects:
+                if 'invincible' in effect.tags or ('ability' in effect.tags and effect.param == 0):
+                    is_invincible = True
+                    break
+            if is_invincible and t_id not in LogicData.invincible_actor:
+                self.logger.debug(f"{hex(t_id)} is add as an invincible actor")
+                LogicData.invincible_actor.add(t_id)
+            if not is_invincible and t_id in LogicData.invincible_actor:
+                self.logger.debug(f"{hex(t_id)} is remove as an invincible actor")
+                try:
+                    LogicData.invincible_actor.remove(t_id)
+                except KeyError:
+                    pass
+
     def _onunload(self):
         self.work = False
         api.command.unregister(command)
         frame_inject.unregister_continue_call(self.action)
+        self.force_action_hook.uninstall()
 
     def action(self):
         if self.work and perf_counter() > self.next_work_time and not api.XivMemory.combat_data.skill_queue.mark1:
@@ -93,13 +146,18 @@ class XivCombat(PluginBase):
                         round_data = LogicData.LogicData(self.state, self.nSkill[0], self.nAbility[0])
                     except LogicData.NoMeActorException:
                         next_period = 0.5
+                        self.is_processing = False
                         raise ContinueException()
                     except LogicData.ActorDeadException:
+                        self.is_processing = False
                         raise ContinueException()
                     except LogicData.TargetNotExistsException:
-                        pass
+                        self.is_processing = False
                     except LogicData.TargetIsSelfException:
-                        pass
+                        self.is_processing = False
+                    except LogicData.NoValidEnemyException:
+                        self.is_processing = False
+                        raise ContinueException()
                     else:
                         if not (round_data.me.CastingID):
                             ans = None
@@ -108,14 +166,19 @@ class XivCombat(PluginBase):
                             if (ans is None) and api.XivMemory.combat_data.is_in_fight and (round_data.job in fight_strategies):
                                 ans = fight_strategies[round_data.job](round_data)
                             if ans is not None:
+                                self.is_processing = True
                                 action, target = ans if type(ans) == tuple else (ans, round_data.target.id)
                                 if (action, target) == self.nSkill[0]:
                                     self.nSkill = [None, 0]
                                 elif (action, target) == self.nAbility[0]:
                                     self.nAbility = [None, 0]
                                 use_skill(action, target)
+                                next_period = 0.4
                                 raise ContinueException()
-                if self.nSkill[0] is not None and api.XivMemory.combat_data.cool_down_group.gcd_group.remain<0.2:
+                        self.is_processing = False
+                else:
+                    self.is_processing = False
+                if self.nSkill[0] is not None and api.XivMemory.combat_data.cool_down_group.gcd_group.remain < 0.2:
                     use_skill(*self.nSkill[0])
                     self.nSkill = [None, 0]
                 elif self.nAbility[0] is not None:
@@ -135,6 +198,8 @@ class XivCombat(PluginBase):
 
     def _start(self):
         self.work = True
+        self.force_action_hook.install()
+        self.force_action_hook.enable()
 
     def get_status_string(self):
         s = "[active]" if self.state['use'] else "[inactive]"

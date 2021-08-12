@@ -13,13 +13,13 @@ try:
 
     # core
     register_modules([
-        "ChatLog",
+        "ChatLog2",
         "Command",
         "HttpApi",
         "XivMemory",
         "XivMagic",
-        #"CombatMonitor",
-        #"XivNetwork",
+        "CombatMonitor",
+        "XivNetwork",
     ])
 
     # functions
@@ -33,7 +33,7 @@ try:
         #"SendKeys",  # 按键发送
         # "Markings",  # 标点功能
         "PosLocker",
-        "SkillAniUnlocker",
+        "SkillAniUnlocker2",
         "Teleporter",
         #"Slider",
         "SpeedHack",
@@ -42,6 +42,9 @@ try:
         #"Facing", #背对
         #"CutTheTree",
         "CutsceneSkipper",
+        "EveryoneFat",
+        "SlaveDriver",
+        "PartyTroubleMaker",
 
     ])
     start()
