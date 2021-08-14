@@ -45,6 +45,7 @@ try:
         "EveryoneFat",
         "SlaveDriver",
         "PartyTroubleMaker",
+        "Rapper",
 
     ])
     start()
