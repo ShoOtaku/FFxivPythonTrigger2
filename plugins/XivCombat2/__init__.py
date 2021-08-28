@@ -1,4 +1,5 @@
 import os
+import re
 from ctypes import *
 from functools import cache
 from threading import Lock
@@ -9,7 +10,7 @@ from FFxivPythonTrigger import PluginBase, frame_inject, api
 from FFxivPythonTrigger.AddressManager import AddressManager
 from FFxivPythonTrigger.SaintCoinach import realm
 from FFxivPythonTrigger.hook import Hook
-from FFxivPythonTrigger.memory import scan_pattern
+from FFxivPythonTrigger.memory import scan_pattern, scan_address
 from FFxivPythonTrigger.memory.StructFactory import OffsetStruct
 
 from . import Config, Api, LogicData, Strategy, Define
@@ -19,22 +20,15 @@ DEFAULT_PERIOD = 0.2
 command = "@aCombat"
 action_sheet = realm.game_data.get_sheet('Action')
 
+hotbar_process_sig = "48 89 5C 24 ? 48 89 6C 24 ? 48 89 74 24 ? 57 48 83 EC ? 0F B6 82 ? ? ? ?"
+can_use_action_interface = CFUNCTYPE(c_bool, c_int64, c_int64, c_uint64)
+can_use_action_sig = "48 89 5C 24 ? 48 89 6C 24 ? 48 89 74 24 ? 57 48 83 EC ? 48 8B 2D ? ? ? ? 49 8B D8"
+action_data_interface = CFUNCTYPE(c_int64, c_int64)
+action_data_sig = "E8 ? ? ? ? 48 8B F0 48 85 C0 0F 84 ? ? ? ? BA ? ? ? ? 48 8B CB E8 ? ? ? ? 48 8B 0D ? ? ? ?"
+action_distance_check_interface = CFUNCTYPE(c_int64, c_uint, c_int64, c_int64)
+action_distance_check_sig = "48 89 5C 24 ? 48 89 74 24 ? 48 89 7C 24 ? 89 4C 24 ?"
 
-def target_key(key: str):
-    if key == "[t]":
-        t = Api.get_current_target()
-    elif key == "[me]":
-        t = Api.get_me_actor()
-    elif key == "[f]":
-        t = Api.get_focus_target()
-    elif key == "[mo]":
-        t = Api.get_mo_target()
-    elif key == "{mo}":
-        t = Api.get_mo_target()
-        if t is None: return None
-    else:
-        return key
-    return t.id if t is not None else Api.get_me_actor().id
+min_hp_re = re.compile(r"\[min_hp:(\d+)]")
 
 
 def use_item(to_use: Strategy.UseItem):
@@ -101,10 +95,16 @@ class XivCombat2(PluginBase):
                             t_id = Api.get_me_actor().id if t is None else t.id
                             if block.type == 1 and (not is_area_action(block.param) or self.config.auto_location):
                                 self.config.enable = False
+                                action_id = block.param
+                                data = LogicData.LogicData(self.config)
+                                strategy = self.config.get_strategy(data.job)
+                                if strategy is not None:
+                                    to_use = strategy.process_ability_use(data, block.param, t_id)
+                                    if to_use is not None: action_id, t_id = to_use
                                 if self.config.custom_settings.setdefault('debug_output', 'false') == 'true':
-                                    self.logger.debug(f"force action {block.param}")
+                                    self.logger.debug(f"force action {action_id} on {t_id:x}")
                                 self.config.ability_cnt += 1
-                                use_ability(Strategy.UseAbility(block.param, t_id))
+                                use_ability(Strategy.UseAbility(action_id, t_id))
                                 self.config.enable = True
                                 return 1
                             elif block.type == 2 or block.type == 10:
@@ -129,10 +129,12 @@ class XivCombat2(PluginBase):
                 'target': ["focus", "current", "list_distance"],
             })
         )
-        self.hotbar_process_hook = HotbarProcessHook(
-            AddressManager(self.storage.data, self.logger)
-                .get('hotbar_process', scan_pattern, "48 89 5C 24 ? 48 89 6C 24 ? 48 89 74 24 ? 57 48 83 EC ? 0F B6 82 ? ? ? ?")
-        )
+        am = AddressManager(self.storage.data, self.logger)
+        self.hotbar_process_hook = HotbarProcessHook(am.get('hotbar_process', scan_pattern, hotbar_process_sig))
+        Api._func_action_data = action_data_interface(am.get('action_data', scan_address, action_data_sig, cmd_len=5))
+        Api._func_can_use_action_to = can_use_action_interface(am.get('can_use_action_to', scan_pattern, can_use_action_sig))
+        Api._func_action_distance_check = action_distance_check_interface(am.get('action_distance_check', scan_pattern, action_distance_check_sig))
+        Api._action_data.cache_clear()
         self.save_config()
 
         self.work = False
@@ -155,6 +157,7 @@ class XivCombat2(PluginBase):
         self.hotbar_process_hook.install()
         self.hotbar_process_hook.enable()
         self.work = True
+        self.logger("start combat thread")
         while self.work:  # 独立线程版本
             try:
                 sleep_time = self._process() if self.config.enable else DEFAULT_PERIOD
@@ -200,6 +203,7 @@ class XivCombat2(PluginBase):
         to_use = None
         if data.gcd < 0.2: self.config.ability_cnt = 0
         process_non_gcd = data.gcd > 0.9 and self.config.ability_cnt < int(data.gcd_total) or data.gcd == 0
+        # self.logger(data.job)
         strategy = self.config.get_strategy(data.job)
         if strategy is not None and (not strategy.fight_only or data.valid_enemies):
             self.is_working = True
@@ -235,7 +239,8 @@ class XivCombat2(PluginBase):
             if isinstance(to_use, Strategy.UseAbility) and Api.skill_queue_is_empty():
                 if data.config.custom_settings.setdefault('debug_output', 'false') == 'true':
                     actor = Api.get_actor_by_id(to_use.target_id)
-                    self.logger.debug(f"use:{action_sheet[to_use.ability_id]['Name']}({to_use.ability_id}) on {actor.Name}({hex(actor.id)[2:]}")
+                    self.logger.debug(f"use:{action_sheet[to_use.ability_id]['Name']}({to_use.ability_id}) on {actor.Name}({hex(actor.id)[2:]})"
+                                      f" check: {data.target_action_check(to_use.ability_id, actor)}")
                 use_ability(to_use)
             elif isinstance(to_use, Strategy.UseItem):  # 使用道具，应该只有食物或者爆发药吧？
                 use_item(to_use)
@@ -283,7 +288,7 @@ class XivCombat2(PluginBase):
             self.config.resource = int(args[1])
         elif args[0] == "load":
             if args[1] == "current":
-                key = Api.get_current_job()
+                key = LogicData.LogicData(self.config).job
             else:
                 try:
                     key = int(args[1])
@@ -299,7 +304,7 @@ class XivCombat2(PluginBase):
                 t = Api.get_current_target()
                 target = Api.get_me_actor().id if t is None else t.id
             else:
-                t_key = target_key(args[3])
+                t_key = self.target_key(args[3])
                 if t_key is None: return
                 target = int(t_key)
             a = Strategy.UseAbility(int(args[2]), target)
@@ -387,3 +392,29 @@ class XivCombat2(PluginBase):
         except Exception as e:
             self.logger.error(format_exc())
             api.Magic.echo_msg(e)
+
+    def target_key(self, key: str):
+        t = None
+        if key == "[t]":
+            t = Api.get_current_target()
+        elif key == "[me]":
+            t = Api.get_me_actor()
+        elif key == "[f]":
+            t = Api.get_focus_target()
+        elif key == "[mo]":
+            t = Api.get_mo_target()
+        elif key == "{mo}":
+            t = Api.get_mo_target()
+            if t is None: return None
+        else:
+            _t = min_hp_re.match(key)
+            if _t:
+                dis = float(_t.group(1))
+                ld = LogicData.LogicData(self.config)
+                e = [e for e in ld.valid_enemies if ld.actor_distance_effective(e) < dis]
+                if e:
+                    self.logger(min(e, key=lambda e: e.currentHP).Name)
+                    return min(e, key=lambda e: e.currentHP).id
+                else:
+                    return ld.me.id
+        return t.id if t is not None else Api.get_me_actor().id

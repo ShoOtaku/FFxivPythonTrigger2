@@ -1,4 +1,4 @@
-from typing import Optional, Union, TYPE_CHECKING
+from typing import Optional, Union, TYPE_CHECKING, Tuple
 
 from .LogicData import LogicData
 from .Define import HQ_FIRST
@@ -11,7 +11,6 @@ class UseAbility(object):
     def __init__(self, ability_id: int, target_id: int = None):
         self.ability_id = ability_id
         self.target_id = target_id
-
 
 
 class UseItem(object):
@@ -41,4 +40,7 @@ class Strategy(object):
         pass
 
     def common(self, data: LogicData) -> Optional[Union[UseAbility, UseItem, UseCommon]]:
+        pass
+
+    def process_ability_use(self, data: LogicData, action_id: int, target_id: int) -> Optional[Tuple[int, int]]:
         pass

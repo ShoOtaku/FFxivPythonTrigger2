@@ -22,7 +22,7 @@
 
 @posL
 
-## SkillAniUnlocker2
+## SkillAniUnlocker
 
 解除动画锁（十插）
 
@@ -105,9 +105,9 @@ need Teleporter
 
 @Facing
 
-## ~~XivCombat~~
+## XivCombat
 
-~~@aCombat [on/off] [s/m]~~
+@aCombat [on/off] [s/m]
 
 ## CutTheTree
 
@@ -115,37 +115,15 @@ need Teleporter
 
 @CTT
 
+
+## CutTheTree
+
+金蝶砍树，概率炸游戏，不负责售后
+
+@CTT [on/off/hack]
+
 ```
     [on] 启动自动砍
     [off] 关闭自动砍
     [hack] 自动发包，可以先on再hack，估计会掉线，建议别用了
 ```
-
-## SlaveDrive
-
-虚空雇员，使用后无法与任何物件交互，除非小退游戏
-
-@slave
-
-```
-[collect] 重复一次雇员探险
-[auto] 自动进行雇员探险
-```
-
-## AFix
-
-身位矫正（娱乐用）
-
-@afix
-
-## Rapper
-
-缩短咏唱时间（不能减少gcd）
-
-@rap [get/set] [float]
-
-## EveryoneFat
-
-扩大目标圈，1是极限
-
-@fat [get/set] [float]

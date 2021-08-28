@@ -1,8 +1,9 @@
-from functools import cached_property, lru_cache
+from functools import cached_property, lru_cache, cache
 from math import sqrt
 from typing import TYPE_CHECKING
 
 from FFxivPythonTrigger import Utils, SaintCoinach
+from FFxivPythonTrigger.Logger import info
 
 from . import Api, Define
 
@@ -10,9 +11,13 @@ if TYPE_CHECKING:
     from . import Config
 
 action_sheet = SaintCoinach.realm.game_data.get_sheet('Action')
+zone_sheet = SaintCoinach.realm.game_data.get_sheet('TerritoryType')
 
-invincible_effects = {325, 394, 529, 656, 671, 775, 776, 895, 969, 981, 1570, 1697, 1829, }
+invincible_effects = {325, 394, 529, 656, 671, 775, 776, 895, 969, 981, 1570, 1697, 1829, 1302, }
 invincible_actor = set()
+
+test_enemy_action = 9
+test_enemy_pvp_action = 8746
 
 
 def is_actor_status_can_damage(actor):
@@ -22,6 +27,12 @@ def is_actor_status_can_damage(actor):
         if eid in invincible_effects:
             return False
     return True
+
+
+@cache
+def zone_is_pvp(zone_id):
+    if not zone_id: return False
+    return zone_sheet[zone_id]["IsPvpZone"]
 
 
 class LogicData(object):
@@ -34,7 +45,10 @@ class LogicData(object):
 
     @cached_property
     def job(self):
-        return Api.get_current_job()
+        if self.is_pvp:
+            return f"{Api.get_current_job()}_pvp"
+        else:
+            return str(Api.get_current_job())
 
     @cached_property
     def target(self):
@@ -92,6 +106,14 @@ class LogicData(object):
     def valid_players(self):
         return [player for player in Api.get_players() if player.can_select]
 
+    @cache
+    def target_action_check(self, action_id, target):
+        o = self.me.pos.r
+        self.me.pos.r = self.me.target_radian(target)
+        ans = not Api.action_distance_check(action_id, self.me, target)
+        self.me.pos.r = o
+        return ans
+
     @cached_property
     def valid_enemies(self):
         enemies = Api.get_actors_by_id(*{enemy.id for enemy in Utils.query(Api.get_enemies_iter(), key=lambda x: x.can_select)})
@@ -99,7 +121,7 @@ class LogicData(object):
         if self.config.enable_extra_enemies:
             enemy_id = {enemy.id for enemy in Api.get_enemies_iter()}
             extra_enemies = list()
-            for enemy in Api.get_hostiles():
+            for enemy in Api.get_can_select():
                 if enemy.id not in enemy_id and self.valid_extra_enemies(enemy):
                     extra_enemies.append(enemy)
             enemies += extra_enemies
@@ -107,10 +129,11 @@ class LogicData(object):
 
     @lru_cache
     def valid_extra_enemies(self, enemy):
+        if not is_actor_status_can_damage(enemy): return False
         if enemy.effectiveDistanceY > self.config.extra_enemies_distance: return False
-        if abs(enemy.pos.z - self.me.pos.z) > 5: return False
-        if enemy.currentHP < 2: return False
+        if enemy.currentHP < 3: return False
         if self.config.extra_enemies_combat_only and not enemy.is_in_combat: return False
+        if not Api.can_use_action_to(test_enemy_pvp_action if self.is_pvp else test_enemy_action, enemy): return False
         return True
 
     @lru_cache
@@ -200,7 +223,7 @@ class LogicData(object):
 
     @cached_property
     def is_moving(self):
-        return bool(Api.get_movement_speed())
+        return self.config.custom_settings.setdefault('keep_moving', 'false') == 'true' or bool(Api.get_movement_speed())
 
     @lru_cache
     def actor_distance_effective(self, target_actor):
@@ -220,3 +243,7 @@ class LogicData(object):
     @cached_property
     def coordinate(self):
         return Api.get_coordinate()
+
+    @cached_property
+    def is_pvp(self):
+        return zone_is_pvp(Api.get_zone_id())

@@ -37,7 +37,7 @@ try:
         "Teleporter",
         #"Slider",
         "SpeedHack",
-        #"XivCombat",
+        "XivCombat2",
         "CraftAutomation",
         #"Facing", #背对
         #"CutTheTree",
@@ -46,6 +46,7 @@ try:
         "SlaveDriver",
         "PartyTroubleMaker",
         "Rapper",
+        "Linkross",
 
     ])
     start()

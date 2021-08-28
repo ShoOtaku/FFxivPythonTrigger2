@@ -1,6 +1,10 @@
 from functools import cache, lru_cache
+from datetime import datetime
+# from PyQt5.QtGui import QFont
+# from PyQt5.QtWidgets import QGridLayout, QListWidget
 
 from FFxivPythonTrigger import *
+# from FFxivPythonTrigger.QT import FloatWidget, ui_loop_exec
 
 from FFxivPythonTrigger.SaintCoinach import realm
 from .Define import *
@@ -15,15 +19,31 @@ last_damage_cache = dict()
 
 
 def record_last_damage(actor_id: int, source_name: str, damage: int, reduced_damage=''):
-    last_damage_cache[actor_id] = (source_name, damage, api.XivMemory.actor_table.get_actor_by_id(actor_id).currentHP, reduced_damage, time())
+    damage = f"{damage:,}"
+    current = time()
+    actor = api.XivMemory.actor_table.get_actor_by_id(actor_id)
+    # if actor.shield_percent:
+    #     shield = int(actor.maxHP * actor.shield_percent / 100)
+    #     current_hp = f"{actor.currentHP + shield:,}({actor.currentHP}+{shield})"
+    # else:
+    #     current_hp = f"{actor.currentHP:,}"
+    current_hp = f"{actor.currentHP:,}"
+    if actor_id in last_damage_cache:
+        source_name_old, damage_old, old_hp, reduced_damage_old, last_time = last_damage_cache[actor_id]
+        if current - last_time < 0.1 and old_hp == current_hp:
+            source_name += '+' + source_name_old
+            damage += '+' + damage_old
+            if reduced_damage_old != reduced_damage:
+                reduced_damage += ' & ' + reduced_damage_old
+    last_damage_cache[actor_id] = (source_name, damage, current_hp, reduced_damage, current)
 
 
 def get_last_damage(actor_id: int):
     if actor_id not in last_damage_cache: return None
     source_name, damage, current_hp, reduced_damage, last_time = last_damage_cache[actor_id]
     if last_time < time() - 30: return None
-    msg = f"{source_name}:{damage:,}/{current_hp:,}"
-    if reduced_damage: msg += " - 减伤:" + reduced_damage
+    msg = f"{source_name}:{damage}/{current_hp}"
+    if reduced_damage: msg += " - " + reduced_damage
     return msg
 
 
@@ -103,16 +123,40 @@ class PartyTroubleMaker(PluginBase):
 
     def __init__(self):
         super().__init__()
+        # from pandas.io.clipboard import copy
+
+        # class ListWindow(FloatWidget):
+        #     allow_frameless = True
+        #
+        #     def __init__(self):
+        #         super().__init__()
+        #         self.setWindowTitle("PartyTroubleMaker")
+        #         self.listWidget = QListWidget()
+        #         #self.listWidget.itemSelectionChanged.connect(self.selectionChanged)
+        #         self.setFont(QFont('Times', 16))
+        #         self.layout = QGridLayout()
+        #         self.layout.addWidget(self.listWidget)
+        #         self.setLayout(self.layout)
+
+        # def selectionChanged(self):
+        #     copy('\n'.join([item.text() for item in self.listWidget.selectedItems()]))
+
         self.lock = Lock()
         self.storage.data.setdefault('config', dict())
         self.storage.save()
         self.last_death_count = 0
         self.register_event('network/action_effect', self.action_effect)
         self.register_event('network/actor_control/death', self.dead)
-        self.register_event('network/actor_control/director_update/initial_commence', self.combat_reset)
+        self.register_event('network/combat_reset', self.combat_reset)
+        # self.window: ListWindow = ui_loop_exec(ListWindow)
         api.command.register(command, self.process_command)
 
+    def _start(self):
+        # ui_loop_exec(self.window.show)
+        pass
+
     def _onunload(self):
+        # ui_loop_exec(self.window.full_close)
         api.command.unregister(command)
 
     def get_mode(self, key: str):
@@ -121,8 +165,11 @@ class PartyTroubleMaker(PluginBase):
     def output(self, string, msg_key: str):
         mode = self.get_mode(msg_key)
         if not mode: return
-        cmd = '/p ' if mode == PARTY and is_in_party() else '/e '
-        api.Magic.macro_command(cmd + string)
+        if mode > DISABLE:
+            self.logger.info(string)
+            # ui_loop_exec(self.window.listWidget.addItem, f"[{datetime.now().strftime('%H:%M:%S')}] {string}")
+            # ui_loop_exec(self.window.listWidget.scrollToBottom)
+        if mode == PARTY: api.Magic.macro_command("/p " + string)
 
     def combat_reset(self, evt):
         action_coll_down_cache.clear()
@@ -164,17 +211,23 @@ class PartyTroubleMaker(PluginBase):
                     for effect in effects:
                         if 'ability' in effect.tags:
                             r = set()
+                            sh = set()
                             t = api.XivMemory.actor_table.get_actor_by_id(target_id)
                             if t is not None:
-                                r = {eid for eid, _ in t.effects.get_items()}.intersection(damage_reduce)
+                                t_e = {eid for eid, _ in t.effects.get_items()}
+                                r = t_e.intersection(damage_reduce)
+                                sh = t_e.intersection(shield)
                                 s = api.XivMemory.actor_table.get_actor_by_id(event.source_id)
                                 if s is not None: r |= {eid for eid, _ in s.effects.get_items()}.intersection(enemy_damage_reduce)
-                            r = "/".join([status_name(eid) for eid in r])
-                            record_last_damage(target_id, source_name, effect.param, r)
+                            rs = ""
+                            if r: rs = "减伤：" + "/".join([status_name(eid) for eid in r])
+                            if sh: rs += f"+{t.shield_percent}%盾(≈{t.maxHP * t.shield_percent / 100:,.0f})：" + "/".join(
+                                [status_name(eid) for eid in sh])
+                            record_last_damage(target_id, source_name, effect.param, rs)
                             me = api.XivMemory.actor_table.get_me()
                             if me is not None and target_id == me.id and action_name(event.action_id) not in common_attack_name:
-                                tag = '物理' if 'physics' in effect.tags else '魔法' if 'magic' in effect.tags else '?'
-                                self.output(f"{source_name} {effect.param}({tag}) 减伤：{r}", 'damage_reduce')
+                                tag = ','.join([ability_type[tag] for tag in effect.tags if tag in ability_type])
+                                self.output(f"{source_name} {effect.param}({tag}) {rs}", 'damage_reduce')
                         elif 'instant_death' in effect.tags:
                             record_last_damage(target_id, source_name, -1)
 
